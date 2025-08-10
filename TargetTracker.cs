@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using VRageMath;
 using Sandbox.ModAPI.Ingame;
+using System.Numerics;
 
 namespace IngameScript
 {
@@ -12,20 +13,31 @@ namespace IngameScript
     {
         public Vector3D Position;
         public Vector3D Velocity;
-        public long TimeStamp; // 以毫秒为单位
-        public SimpleTargetInfo(Vector3D position, Vector3D velocity, long timeStamp)
+        public Vector3D Acceleration;
+        public long TimeStamp;
+
+        /// <summary>
+        /// 用于创建 SimpleTargetInfo 的构造函数
+        /// </summary>
+        /// <param name="position">位置信息，必须真实</param>
+        /// <param name="velocity">速度信息，可以为零</param>
+        /// <param name="acceleration">加速度信息，可以为零</param>
+        /// <param name="timeStamp">时间戳ms</param>
+        public SimpleTargetInfo(Vector3D position, Vector3D velocity, Vector3D acceleration, long timeStamp)
         {
             Position = position;
             Velocity = velocity;
+            Acceleration = acceleration;
             TimeStamp = timeStamp;
         }
 
-        // 从 MyDetectedEntityInfo 创建
+        // 从 MyDetectedEntityInfo 创建 由于缺少加速度信息，因此使用零向量填充
         public static SimpleTargetInfo FromDetectedInfo(MyDetectedEntityInfo info)
         {
             return new SimpleTargetInfo(
                 info.Position,
                 new Vector3D(info.Velocity),
+                Vector3D.Zero,
                 info.TimeStamp
             );
         }
@@ -52,67 +64,6 @@ namespace IngameScript
         
         public static CircularMotionParams Invalid => new CircularMotionParams { IsValid = false };
     }
-
-    public class BlockMotionTracker
-    {
-        private IMyTerminalBlock block;
-        private double updateIntervalSeconds;
-
-        private Vector3D lastPosition;
-        private MatrixD lastWorldMatrix;
-
-        public Vector3D LinearVelocity { get; private set; }
-        public Vector3D AngularVelocity { get; private set; }
-        public Vector3D Position { get; private set; }
-
-        /// <summary>
-        /// 构造函数
-        /// </summary>
-        /// <param name="block">任意方块</param>
-        /// <param name="updateIntervalSeconds">更新间隔（秒）</param>
-        public BlockMotionTracker(IMyTerminalBlock block, double updateIntervalSeconds = 0.1667)
-        {
-            this.block = block;
-            this.updateIntervalSeconds = Math.Max(1e-6, updateIntervalSeconds);
-            this.lastPosition = block.GetPosition();
-            this.lastWorldMatrix = block.WorldMatrix;
-            this.LinearVelocity = Vector3D.Zero;
-            this.AngularVelocity = Vector3D.Zero;
-            this.Position = lastPosition;
-        }
-
-        /// <summary>
-        /// 按固定时间间隔调用
-        /// </summary>
-        public void Update()
-        {
-            Vector3D currentPosition = block.GetPosition();
-            MatrixD currentWorldMatrix = block.WorldMatrix;
-
-            // 线速度
-            LinearVelocity = (currentPosition - lastPosition) / updateIntervalSeconds;
-
-            // 角速度（通过旋转矩阵差分近似）
-            MatrixD deltaRotation = MatrixD.Multiply(currentWorldMatrix.GetOrientation(), MatrixD.Transpose(lastWorldMatrix.GetOrientation()));
-            
-            // 使用QuaternionD进行角速度计算
-            QuaternionD deltaQuat = QuaternionD.CreateFromRotationMatrix(deltaRotation);
-            Vector3D axis;
-            double angle;
-            deltaQuat.GetAxisAngle(out axis, out angle);
-            
-            // 确保角度在合理范围内
-            if (angle > Math.PI)
-                angle = angle - 2 * Math.PI;
-            
-            AngularVelocity = axis * (angle / updateIntervalSeconds);
-
-            // 更新状态
-            lastPosition = currentPosition;
-            lastWorldMatrix = currentWorldMatrix;
-            Position = currentPosition;
-        }
-    }
     
     public partial class TargetTracker : MyGridProgram
     {
@@ -131,9 +82,9 @@ namespace IngameScript
 
         // 常量定义
         private const double TimeEpsilon = 1e-6; // 时间差最小值
-        private const double LinearThreshold = 1; // 线性运动检测阈值
+        private const double LinearThreshold = 0.01; // 线性运动检测阈值 sin θ＝0.01 约等于 θ≈0.57°
         private const double RadiusThreshold = 1e6; // 半径过大阈值
-        private const double MaxAccResetThreshold = 25.0; // 误差过大时重置最大加速度记录
+        private const double MaxAccResetThreshold = 20.0; // 误差超过20m/s时重置最大加速度记录
 
         #endregion
 
@@ -180,12 +131,14 @@ namespace IngameScript
         {
             UpdateTarget(SimpleTargetInfo.FromDetectedInfo(target), hasVelocityAvailable);
         }
-
         public void UpdateTarget(Vector3D position, Vector3D velocity, long timeStamp, bool hasVelocityAvailable = false)
         {
-            UpdateTarget(new SimpleTargetInfo(position, velocity, timeStamp), hasVelocityAvailable);
+            UpdateTarget(new SimpleTargetInfo(position, velocity, Vector3D.Zero, timeStamp), hasVelocityAvailable);
         }
-
+        public void UpdateTarget(Vector3D position, long timeStamp, bool hasVelocityAvailable = false)
+        {
+            UpdateTarget(new SimpleTargetInfo(position, Vector3D.Zero, Vector3D.Zero, timeStamp), hasVelocityAvailable);
+        }
         /// <summary>
         /// 清空目标历史记录
         /// </summary>
@@ -237,7 +190,7 @@ namespace IngameScript
         {
             if (_history.Count == 0)
             {
-                return new SimpleTargetInfo(Vector3D.Zero, Vector3D.Zero, 0);
+                return new SimpleTargetInfo();
             }
 
             if (_history.Count <= 2)
@@ -270,8 +223,9 @@ namespace IngameScript
 
                 Vector3D combinedPosition = linearPrediction.Position * linearWeight + circularPrediction.Position * circularWeight;
                 Vector3D combinedVelocity = linearPrediction.Velocity * linearWeight + circularPrediction.Velocity * circularWeight;
+                Vector3D combinedAcceleration = linearPrediction.Acceleration * linearWeight + circularPrediction.Acceleration * circularWeight;
 
-                return new SimpleTargetInfo(combinedPosition, combinedVelocity, p0.TimeStamp + futureTimeMs);
+                return new SimpleTargetInfo(combinedPosition, combinedVelocity, combinedAcceleration, p0.TimeStamp + futureTimeMs);
             }
             else if (useLinear)
             {
@@ -301,7 +255,7 @@ namespace IngameScript
             var current = _history.First;
             double dt = futureTimeMs * 0.001;
             Vector3D predictedPos = current.Position + current.Velocity * dt;
-            return new SimpleTargetInfo(predictedPos, current.Velocity, current.TimeStamp + futureTimeMs);
+            return new SimpleTargetInfo(predictedPos, current.Velocity, Vector3D.Zero, current.TimeStamp + futureTimeMs);
         }
 
         /// <summary>
@@ -365,12 +319,12 @@ namespace IngameScript
                 predictedPos = currentPos + currentVel * dt_predict + 0.5 * acceleration * dt_predict * dt_predict;
                 predictedVel = currentVel + acceleration * dt_predict;
             }
-            
+
             // 根据情况重置/更新最大加速度记录
-            if (combinationError >= MaxAccResetThreshold) maxTargetAcceleration = 0; 
+            if (combinationError >= MaxAccResetThreshold) maxTargetAcceleration = 0;
             else maxTargetAcceleration = Math.Max(maxTargetAcceleration, acceleration.Length());
 
-            return new SimpleTargetInfo(predictedPos, predictedVel, p0.TimeStamp + futureTimeMs);
+            return new SimpleTargetInfo(predictedPos, predictedVel, acceleration, p0.TimeStamp + futureTimeMs);
         }
 
         /// <summary>
@@ -382,14 +336,17 @@ namespace IngameScript
         /// <returns>圆周运动参数</returns>
         private CircularMotionParams CalculateCircularMotionParams(SimpleTargetInfo p0, SimpleTargetInfo p1, SimpleTargetInfo p2)
         {
-            // 检测是否为线性运动
+            // 检测是否为近似共线（直线运动）
             Vector3D a = p1.Position - p0.Position;
             Vector3D b = p2.Position - p0.Position;
             Vector3D cross = Vector3D.Cross(a, b);
 
-            if (cross.LengthSquared() < LinearThreshold)
+            double a2 = a.LengthSquared();
+            double b2 = b.LengthSquared();
+            // cross² = |a|²·|b|²·sin²θ，归一化后判断 sin²θ < 阈值²
+            if (cross.LengthSquared() < a2 * b2 * LinearThreshold * LinearThreshold)
             {
-                return CircularMotionParams.Invalid; // 直线运动
+                return CircularMotionParams.Invalid; // 近似直线
             }
 
             // 计算外接圆参数
@@ -481,7 +438,10 @@ namespace IngameScript
             // 预测速度（旋转当前速度向量）
             Vector3D predictedVel = Vector3D.Transform(currentVel, rotation);
 
-            return new SimpleTargetInfo(predictedPos, predictedVel, p0.TimeStamp + futureTimeMs);
+            // 计算向心加速度向量（a = ω²·r，方向指向圆心）
+            Vector3D centripetalAcc = -circularParams.AngularVelocity * circularParams.AngularVelocity * rotatedRadius;
+
+            return new SimpleTargetInfo(predictedPos, predictedVel, centripetalAcc, p0.TimeStamp + futureTimeMs);
         }
 
         /// <summary>

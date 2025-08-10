@@ -1,5 +1,6 @@
 using System;
 using VRage.Game.ModAPI.Ingame;
+using Sandbox.ModAPI.Ingame;
 using VRageMath;
 
 namespace IngameScript
@@ -43,11 +44,12 @@ namespace IngameScript
 
         #region 雷达参数
         // 算法参数
-        public double 目标关联距离阈值 { get; set; } = 500.0; // 米
-        public double 速度关联阈值 { get; set; } = 100.0; // m/s
-        public int 目标确认帧数 { get; set; } = 3; // 需要连续确认的帧数
-        public int 目标丢失超时帧数 { get; set; } = 180; // 6秒超时(按30FPS计算)
-        public int 暂定目标超时帧数 { get; set; } = 90; // 3秒暂定超时
+        public double 时间常数 { get; set; } = 1.0 / 60.0; // 秒
+        public double 目标关联距离阈值 { get; set; } = 100.0; // 米
+        public int 目标确认帧数 { get; set; } = 2; // 需要连续确认的帧数
+        public int 目标丢失超时帧数 { get; set; } = 91;
+        public int 暂定目标超时帧数 { get; set; } = 91;
+        public int 跟踪器更新最低间隔 { get; set; } = 20;
 
         #endregion
         #region 构造函数
@@ -55,9 +57,16 @@ namespace IngameScript
         /// <summary>
         /// 默认构造函数，使用默认参数
         /// </summary>
-        public 参数管理器()
+        public 参数管理器(IMyTerminalBlock block)
         {
-            // 所有参数已在属性声明时设置默认值
+            // 初始化参数管理器（可以从Me.CustomData读取配置）
+            string 自定义数据 = block.CustomData;
+            if (!string.IsNullOrWhiteSpace(自定义数据))
+            {
+                解析配置字符串(自定义数据);
+                block.CustomData = 生成配置字符串();
+            }
+            else block.CustomData = 生成配置字符串();
         }
 
         /// <summary>
@@ -125,9 +134,6 @@ namespace IngameScript
                     case "目标关联距离阈值":
                         目标关联距离阈值 = double.Parse(参数值);
                         break;
-                    case "速度关联阈值":
-                        速度关联阈值 = double.Parse(参数值);
-                        break;
                     case "目标确认帧数":
                         目标确认帧数 = int.Parse(参数值);
                         break;
@@ -168,7 +174,6 @@ namespace IngameScript
             配置.AppendLine($"战斗块攻击模式={战斗块攻击模式}");
             配置.AppendLine("// 雷达参数");
             配置.AppendLine($"目标关联距离阈值={目标关联距离阈值}");
-            配置.AppendLine($"速度关联阈值={速度关联阈值}");
             配置.AppendLine($"目标确认帧数={目标确认帧数}");
             配置.AppendLine($"目标丢失超时帧数={目标丢失超时帧数}");
             配置.AppendLine($"暂定目标超时帧数={暂定目标超时帧数}");

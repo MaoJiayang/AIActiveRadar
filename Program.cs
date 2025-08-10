@@ -22,25 +22,22 @@ namespace IngameScript
 {
     public partial class Program : MyGridProgram
     {
-        private IMyChatBroadcastControllerComponent _chat;  // 聊天广播组件
         private AI雷达 _radar;
-        private 参数管理器 _paramMgr;
+        private 参数管理器 参数们;
         private IMyFlightMovementBlock _flightBlock;
-        private IMyOffensiveCombatBlock _combatBlock;
+        private List<IMyOffensiveCombatBlock> _combatBlocks;
 
+        #region 性能统计变量
+        private double 总运行时间毫秒;
+        private int 运行次数;
+        private double 最大运行时间毫秒;
+        private StringBuilder 性能统计信息 = new StringBuilder();
+        private string 性能统计信息缓存 = string.Empty;
+        #endregion
         public Program()
         {
             // 1. 读取/写入自定义数据
-            string config = Me.CustomData;
-            if (string.IsNullOrWhiteSpace(config))
-            {
-                _paramMgr = new 参数管理器();
-                Me.CustomData = _paramMgr.生成配置字符串();
-            }
-            else
-            {
-                _paramMgr = new 参数管理器(config);
-            }
+            参数们 = new 参数管理器(Me);
 
             // 2. 搜索AI块
             var flightBlocks = new List<IMyFlightMovementBlock>();
@@ -49,11 +46,11 @@ namespace IngameScript
             GridTerminalSystem.GetBlocksOfType(combatBlocks, b => b.CubeGrid == Me.CubeGrid);
 
             _flightBlock = flightBlocks.Count > 0 ? flightBlocks[0] : null;
-            _combatBlock = combatBlocks.Count > 0 ? combatBlocks[0] : null;
+            _combatBlocks = combatBlocks;
 
-            if (_flightBlock != null && _combatBlock != null)
+            if (_flightBlock != null && _combatBlocks != null && _combatBlocks.Count > 0)
             {
-                _radar = new AI雷达(_flightBlock, _combatBlock, _paramMgr);
+                _radar = new AI雷达(_flightBlock, _combatBlocks, 参数们);
                 Runtime.UpdateFrequency = UpdateFrequency.Update1;
             }
             else
@@ -78,8 +75,8 @@ namespace IngameScript
             // 更新雷达
             _radar.Update();
 
-            // 打印雷达自身信息
-            Echo(_radar.GetRadarStatus());
+            // // 打印雷达自身信息
+            // Echo(_radar.GetRadarStatus());
 
             // 打印所有目标id和距离
             var allTargets = _radar.GetAllTargets();
@@ -89,8 +86,48 @@ namespace IngameScript
             {
                 var t = kv.Value;
                 double dist = Vector3D.Distance(myPos, t.Position);
-                Echo($"ID:{t.Id} 距离:{dist:F1}m");
+                Echo($"===ID:{t.Id}===\n距离:{dist:F1}m\n状态:{t.State}\n上次更新:{t.LastUpdateTick}");
             }
+            更新性能统计信息();
+            if (运行次数 % 20 == 0) 性能统计信息缓存 = 性能统计信息.ToString();
+            Echo(性能统计信息缓存);
+
+
         }
+
+        #region 性能统计
+        /// <summary>
+        /// 更新运行性能统计信息
+        /// </summary>
+        private void 更新性能统计信息()
+        {
+            // 更新运行时间统计
+            double 上次运行时间毫秒 = Runtime.LastRunTimeMs;
+
+            总运行时间毫秒 += 上次运行时间毫秒;
+            运行次数 = (运行次数 + 1) % int.MaxValue;
+            if (运行次数 % 600 == 0)
+            {
+                // 每600次运行重置统计信息
+                总运行时间毫秒 = 0;
+                运行次数 = 0;
+                最大运行时间毫秒 = 0;
+            }
+            if (上次运行时间毫秒 > 最大运行时间毫秒)
+                最大运行时间毫秒 = 上次运行时间毫秒;
+            // 计算平均运行时间
+            double 平均运行时间毫秒 = 总运行时间毫秒 / 运行次数;
+
+            // 清空并重新构建性能统计信息
+            性能统计信息.Clear();
+            性能统计信息.AppendLine("=== 性能统计 ===");
+            性能统计信息.AppendLine($"上次运行: {上次运行时间毫秒:F3} ms");
+            性能统计信息.AppendLine($"平均运行: {平均运行时间毫秒:F3} ms");
+            性能统计信息.AppendLine($"最大运行: {最大运行时间毫秒:F3} ms");
+            性能统计信息.AppendLine($"运行次数: {运行次数}");
+            性能统计信息.AppendLine($"指令使用: {Runtime.CurrentInstructionCount}/{Runtime.MaxInstructionCount}");
+            性能统计信息.AppendLine("================");
+        }
+        #endregion
     }
 }

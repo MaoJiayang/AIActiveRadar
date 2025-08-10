@@ -14,21 +14,17 @@ namespace IngameScript
     {
         public int Id;
         public Vector3D Position;
-        public Vector3D Velocity;
-        public long LastUpdateTime;
+        public long LastUpdateTick;
         public int ConfirmationLevel; // 确认级别 0-未确认, 1-暂定, 2-已确认
         public TargetState State; // 目标状态
-        public string SourceType; // 来源类型 "Closest", "Largest", "Smallest"
-        
-        public RadarTarget(int id, Vector3D position, Vector3D velocity, long updateTime, string sourceType)
+
+        public RadarTarget(int id, Vector3D position, long updateTime)
         {
             Id = id;
             Position = position;
-            Velocity = velocity;
-            LastUpdateTime = updateTime;
+            LastUpdateTick = updateTime;
             ConfirmationLevel = 0;
             State = TargetState.Detected;
-            SourceType = sourceType;
         }
     }
 
@@ -50,13 +46,12 @@ namespace IngameScript
     public class AI雷达
     {
         private IMyFlightMovementBlock 飞行块;
-        private IMyOffensiveCombatBlock 战斗块;
+        private List<IMyOffensiveCombatBlock> 战斗块列表;
         private 参数管理器 参数们;
         
         // 目标管理
         private Dictionary<int, RadarTarget> 跟踪目标表 = new Dictionary<int, RadarTarget>();
         private Dictionary<int, TargetTracker> 目标跟踪器表 = new Dictionary<int, TargetTracker>();
-        private Dictionary<string, Vector3D> 原始检测数据 = new Dictionary<string, Vector3D>();
         
         // 优先级轮换
         private OffensiveCombatTargetPriority[] 优先级序列 = new[] {
@@ -66,14 +61,18 @@ namespace IngameScript
         };
         private int 当前优先级索引 = 0;
         
+        // 多攻击块管理
+        private int 当前攻击块索引 = 0;
+        
         // 计数器和参数
         private long 帧计数 = 0;
+        private long 当前时间戳ms { get { return 帧转毫秒(帧计数); } }
         private int 下一个目标ID = 1;
 
-        public AI雷达(IMyFlightMovementBlock flightBlock, IMyOffensiveCombatBlock combatBlock, 参数管理器 参数管理器)
+        public AI雷达(IMyFlightMovementBlock flightBlock, List<IMyOffensiveCombatBlock> combatBlocks, 参数管理器 参数管理器)
         {
             飞行块 = flightBlock;
-            战斗块 = combatBlock;
+            战斗块列表 = combatBlocks ?? new List<IMyOffensiveCombatBlock>();
             参数们 = 参数管理器;
             InitAI();
         }
@@ -83,7 +82,7 @@ namespace IngameScript
         /// </summary>
         private void InitAI()
         {
-            if (飞行块 == null || 战斗块 == null)
+            if (飞行块 == null || 战斗块列表 == null || 战斗块列表.Count == 0)
                 return;
                 
             // 配置飞行AI
@@ -95,23 +94,36 @@ namespace IngameScript
                 飞行块.ApplyAction("ActivateBehavior_On");
             }
 
-            // 配置战斗AI
-            if (战斗块 != null)
+            // 配置所有战斗AI块
+            for (int i = 0; i < 战斗块列表.Count; i++)
             {
-                战斗块.TargetPriority = 参数们.目标优先级;
-                战斗块.UpdateTargetInterval = 参数们.战斗块更新间隔正常;
-                战斗块.Enabled = true;
-                战斗块.SelectedAttackPattern = 参数们.战斗块攻击模式;
-                战斗块.ApplyAction("ActivateBehavior_On");
-
-                IMyAttackPatternComponent 攻击模式;
-                if (战斗块.TryGetSelectedAttackPattern(out 攻击模式))
+                var 战斗块 = 战斗块列表[i];
+                if (战斗块 != null)
                 {
-                    IMyOffensiveCombatIntercept 拦截模式 = 攻击模式 as IMyOffensiveCombatIntercept;
-                    if (拦截模式 != null)
+                    战斗块.TargetPriority = 参数们.目标优先级;
+                    战斗块.UpdateTargetInterval = 参数们.战斗块更新间隔正常;
+                    战斗块.Enabled = true;
+                    战斗块.SelectedAttackPattern = 参数们.战斗块攻击模式;
+                    
+                    // 只激活第一个攻击块，其他的关闭
+                    if (i == 当前攻击块索引)
                     {
-                        拦截模式.GuidanceType = GuidanceType.Basic;
+                        战斗块.ApplyAction("ActivateBehavior_On");
                     }
+                    else
+                    {
+                        战斗块.ApplyAction("ActivateBehavior_Off");
+                    }
+
+                    // IMyAttackPatternComponent 攻击模式;
+                    // if (战斗块.TryGetSelectedAttackPattern(out 攻击模式))
+                    // {
+                    //     IMyOffensiveCombatIntercept 拦截模式 = 攻击模式 as IMyOffensiveCombatIntercept;
+                    //     if (拦截模式 != null)
+                    //     {
+                    //         拦截模式.GuidanceType = GuidanceType.Basic;
+                    //     }
+                    // }
                 }
             }
         }
@@ -126,7 +138,7 @@ namespace IngameScript
             bool 有新目标 = false;
 
             // 1. 获取当前检测数据
-            var 当前检测 = 获取当前检测数据();
+            Vector3D 当前检测 = 获取当前检测数据();
             
             // 2. 数据关联与目标更新
             有新目标 = 处理检测数据(当前检测);
@@ -137,9 +149,6 @@ namespace IngameScript
             // 4. 目标状态管理
             管理目标状态();
             
-            // 5. 清理过期目标
-            清理过期目标();
-            
             // 6. 切换检测优先级
             切换检测优先级();
             
@@ -149,57 +158,43 @@ namespace IngameScript
         /// <summary>
         /// 获取当前检测数据
         /// </summary>
-        private Dictionary<string, Vector3D> 获取当前检测数据()
+        /// <returns>当前检测数据（优先级: 位置）</returns>
+        private Vector3D 获取当前检测数据()
         {
-            var 检测数据 = new Dictionary<string, Vector3D>();
-            
             // 获取AI块当前检测的目标
             var 路径点列表 = new List<IMyAutopilotWaypoint>();
             飞行块.GetWaypoints(路径点列表);
-            
-            if (路径点列表.Count > 0)
+            if(路径点列表.Count == 0)
             {
-                var 路径点 = 路径点列表[路径点列表.Count - 1];
-                var m = 路径点.Matrix;
-                var 目标位置 = new Vector3D(m.M41, m.M42, m.M43);
-                
-                string 当前优先级名 = 战斗块.TargetPriority.ToString();
-                检测数据[当前优先级名] = 目标位置;
+                // 如果没有路径点，返回0
+                return Vector3D.Zero;
             }
-            
-            return 检测数据;
+            var 路径点 = 路径点列表[路径点列表.Count - 1];
+            var m = 路径点.Matrix;
+            return new Vector3D(m.M41, m.M42, m.M43);
         }
 
         /// <summary>
         /// 处理检测数据，进行目标关联
         /// </summary>
-        private bool 处理检测数据(Dictionary<string, Vector3D> 当前检测)
+        private bool 处理检测数据(Vector3D 当前检测)
         {
             bool 有新目标 = false;
+            if (当前检测 == Vector3D.Zero) return false;
+            // 检查是否与已有目标关联
+            int 关联目标ID = _查找关联目标(当前检测);
             
-            foreach (var 检测项 in 当前检测)
+            if (关联目标ID != -1)
             {
-                string 类型 = 检测项.Key;
-                Vector3D 位置 = 检测项.Value;
-                
-                // 检查是否与已有目标关联
-                int 关联目标ID = 查找关联目标(位置);
-                
-                if (关联目标ID != -1)
-                {
-                    // 更新已有目标
-                    更新已有目标(关联目标ID, 位置, 类型);
-                }
-                else
-                {
-                    // 创建新目标
-                    创建新目标(位置, 类型);
-                    有新目标 = true;
-                }
+                // 更新已有目标
+                _更新已有目标(关联目标ID, 当前检测);
             }
-            
-            // 更新原始检测数据记录
-            原始检测数据 = 当前检测;
+            else
+            {
+                // 创建新目标
+                _创建新目标(当前检测);
+                有新目标 = true;
+            }
             
             return 有新目标;
         }
@@ -207,7 +202,7 @@ namespace IngameScript
         /// <summary>
         /// 查找与给定位置关联的目标ID
         /// </summary>
-        private int 查找关联目标(Vector3D 位置)
+        private int _查找关联目标(Vector3D 位置)
         {
             double 最小距离 = 参数们.目标关联距离阈值;
             int 最佳匹配ID = -1;
@@ -215,21 +210,30 @@ namespace IngameScript
             foreach (var 目标项 in 跟踪目标表)
             {
                 var 目标 = 目标项.Value;
-                if (目标.State == TargetState.Lost)
-                    continue;
+                // if (目标.State == TargetState.Lost)
+                //     continue;
                     
                 // 计算位置距离
                 double 距离 = Vector3D.Distance(目标.Position, 位置);
-                
+                long 时间差 = 帧计数 - 目标.LastUpdateTick;
+
+                if (距离 < 1e-6)
+                {
+                    // 为坐标不变的目标保持一个最小更新频率
+                    if (时间差 < 参数们.目标丢失超时帧数 - 3)
+                        return -114514;
+                    else return 目标.Id;
+                }
+                    
                 // 如果有跟踪器，使用预测位置进行更精确的关联
                 if (目标跟踪器表.ContainsKey(目标.Id))
                 {
                     var 跟踪器 = 目标跟踪器表[目标.Id];
-                    long 时间差 = 帧计数 - 目标.LastUpdateTime;
-                    var 预测位置 = 跟踪器.PredictFutureTargetInfo(时间差 * 17); // 17ms每帧
+
+                    var 预测位置 = 跟踪器.PredictFutureTargetInfo(帧转毫秒(时间差));
                     距离 = Vector3D.Distance(预测位置.Position, 位置);
                 }
-                
+
                 if (距离 < 最小距离)
                 {
                     最小距离 = 距离;
@@ -243,27 +247,16 @@ namespace IngameScript
         /// <summary>
         /// 更新已有目标
         /// </summary>
-        private void 更新已有目标(int 目标ID, Vector3D 位置, string 类型)
+        private void _更新已有目标(int 目标ID, Vector3D 位置)
         {
             if (!跟踪目标表.ContainsKey(目标ID))
                 return;
                 
             var 目标 = 跟踪目标表[目标ID];
             
-            // 计算速度（简单的差分方法）
-            long 时间差帧 = 帧计数 - 目标.LastUpdateTime;
-            Vector3D 速度 = Vector3D.Zero;
-            if (时间差帧 > 0)
-            {
-                double 时间差秒 = 时间差帧 / 60.0; // 假设60FPS
-                速度 = (位置 - 目标.Position) / 时间差秒;
-            }
-            
             // 更新目标信息
             目标.Position = 位置;
-            目标.Velocity = 速度;
-            目标.LastUpdateTime = 帧计数;
-            目标.SourceType = 类型;
+            目标.LastUpdateTick = 帧计数;
             
             // 提升确认级别
             if (目标.ConfirmationLevel < 参数们.目标确认帧数)
@@ -289,10 +282,10 @@ namespace IngameScript
         /// <summary>
         /// 创建新目标
         /// </summary>
-        private void 创建新目标(Vector3D 位置, string 类型)
+        private void _创建新目标(Vector3D 位置)
         {
             int 新ID = 下一个目标ID++;
-            var 新目标 = new RadarTarget(新ID, 位置, Vector3D.Zero, 帧计数, 类型);
+            var 新目标 = new RadarTarget(新ID, 位置, 帧计数);
             新目标.ConfirmationLevel = 1;
             新目标.State = TargetState.Detected;
             
@@ -300,7 +293,6 @@ namespace IngameScript
             
             // 创建对应的目标跟踪器
             var 跟踪器 = new TargetTracker(参数们.目标历史最大长度);
-            跟踪器.UpdateTarget(位置, Vector3D.Zero, 帧计数 * 17, false); // 17ms每帧
             目标跟踪器表[新ID] = 跟踪器;
         }
 
@@ -314,13 +306,12 @@ namespace IngameScript
                 int ID = 目标项.Key;
                 var 目标 = 目标项.Value;
                 
-                if (目标.State == TargetState.Lost)
+                if (目标.LastUpdateTick != 帧计数) // 只更新当前帧刷新了的目标
                     continue;
-                    
                 if (目标跟踪器表.ContainsKey(ID))
                 {
                     var 跟踪器 = 目标跟踪器表[ID];
-                    跟踪器.UpdateTarget(目标.Position, 目标.Velocity, 目标.LastUpdateTime * 17, false);
+                    跟踪器.UpdateTarget(目标.Position, 当前时间戳ms);
                 }
             }
         }
@@ -330,13 +321,14 @@ namespace IngameScript
         /// </summary>
         private void 管理目标状态()
         {
+            var 待删除列表 = new List<int>();
             foreach (var 目标项 in 跟踪目标表.ToList())
             {
                 int ID = 目标项.Key;
                 var 目标 = 目标项.Value;
-                
-                long 未更新帧数 = 帧计数 - 目标.LastUpdateTime;
-                
+
+                long 未更新帧数 = 帧计数 - 目标.LastUpdateTick;
+
                 // 检查目标是否超时
                 if (目标.State == TargetState.Tentative && 未更新帧数 > 参数们.暂定目标超时帧数)
                 {
@@ -346,30 +338,22 @@ namespace IngameScript
                 {
                     目标.State = TargetState.Lost;
                 }
-                
-                跟踪目标表[ID] = 目标;
-            }
-        }
-
-        /// <summary>
-        /// 清理过期目标
-        /// </summary>
-        private void 清理过期目标()
-        {
-            var 待删除列表 = new List<int>();
-            
-            foreach (var 目标项 in 跟踪目标表)
-            {
-                if (目标项.Value.State == TargetState.Lost)
+                else if (目标.State == TargetState.Lost && 未更新帧数 < 参数们.目标丢失超时帧数)
                 {
-                    long 丢失时间 = 帧计数 - 目标项.Value.LastUpdateTime;
-                    if (丢失时间 > 参数们.目标丢失超时帧数 * 2) // 双倍超时时间后完全删除
+                    目标.State = TargetState.Tentative;
+                }
+                跟踪目标表[ID] = 目标;
+
+                // 准备待删除目标
+                if (目标.State == TargetState.Lost)
+                {
+                    if (未更新帧数 > 参数们.目标丢失超时帧数 * 2) // 双倍超时时间后完全删除
                     {
                         待删除列表.Add(目标项.Key);
                     }
                 }
             }
-            
+
             foreach (int ID in 待删除列表)
             {
                 跟踪目标表.Remove(ID);
@@ -377,15 +361,45 @@ namespace IngameScript
             }
         }
 
+
         /// <summary>
         /// 切换检测优先级
         /// </summary>
         private void 切换检测优先级()
         {
-            当前优先级索引 = (当前优先级索引 + 1) % 优先级序列.Length;
-            战斗块.TargetPriority = 优先级序列[当前优先级索引];
+            if (战斗块列表 == null || 战斗块列表.Count == 0)
+                return;
+
+            // 关闭当前激活的攻击块
+            if (当前攻击块索引 < 战斗块列表.Count && 战斗块列表[当前攻击块索引] != null)
+            {
+                战斗块列表[当前攻击块索引].ApplyAction("ActivateBehavior_Off");
+            }
+
+            // 切换到下一个攻击块
+            当前攻击块索引 = (当前攻击块索引 + 1) % 战斗块列表.Count;
+
+            // 激活新的攻击块并设置优先级
+            var 当前战斗块 = 战斗块列表[当前攻击块索引];
+            if (当前战斗块 != null)
+            {
+                当前战斗块.ApplyAction("ActivateBehavior_On");
+                
+                // 切换优先级
+                当前优先级索引 = (当前优先级索引 + 1) % 优先级序列.Length;
+                当前战斗块.TargetPriority = 优先级序列[当前优先级索引];
+            }
         }
 
+        /// <summary>
+        /// 将帧数转换为毫秒时间戳
+        /// </summary>
+        /// <param name="帧"></param>
+        /// <returns></returns>
+        public long 帧转毫秒(long 帧)
+        {
+            return (long)Math.Round(帧 * 参数们.时间常数 * 1000);
+        }
         #region 对外接口
 
         /// <summary>
@@ -432,7 +446,7 @@ namespace IngameScript
         {
             if (跟踪目标表.ContainsKey(targetId))
             {
-                return 帧计数 - 跟踪目标表[targetId].LastUpdateTime;
+                return 帧计数 - 跟踪目标表[targetId].LastUpdateTick;
             }
             return -1;
         }
@@ -482,10 +496,19 @@ namespace IngameScript
                     case TargetState.Lost: 丢失++; break;
                 }
             }
+
+            // 获取当前激活攻击块的优先级
+            string 当前优先级 = "无";
+            if (战斗块列表 != null && 当前攻击块索引 < 战斗块列表.Count && 战斗块列表[当前攻击块索引] != null)
+            {
+                当前优先级 = 战斗块列表[当前攻击块索引].TargetPriority.ToString();
+            }
             
             return $"雷达状态: 检测中:{检测中} 暂定:{暂定} 已确认:{已确认} 跟踪中:{跟踪中} 丢失:{丢失}\n" +
                    $"当前帧数: {帧计数}\n" +
-                   $"当前优先级: {战斗块.TargetPriority}";
+                   $"攻击块总数: {(战斗块列表?.Count ?? 0)}\n" +
+                   $"当前攻击块: {当前攻击块索引}\n" +
+                   $"当前优先级: {当前优先级}";
         }
 
         /// <summary>
@@ -511,7 +534,6 @@ namespace IngameScript
         {
             跟踪目标表.Clear();
             目标跟踪器表.Clear();
-            原始检测数据.Clear();
             下一个目标ID = 1;
         }
 

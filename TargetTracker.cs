@@ -71,7 +71,17 @@ namespace IngameScript
 
         public double circlingRadius = 0; // 目标当前环绕半径
         public double linearWeight, circularWeight;
-        public double linearPositionError, circularPositionError, combinationError;
+
+        /// <summary>
+        /// 单位：米每秒
+        /// </summary>
+        public double linearError, circularError;
+
+        /// <summary>
+        /// 单位：米每秒
+        /// </summary>
+        public double combinationError;
+
         public double maxTargetAcceleration = 0; // 最大目标加速度（单位：m/s²）
         // 目标历史记录最大长度
         private readonly int _maxHistory;
@@ -454,8 +464,8 @@ namespace IngameScript
             // 历史记录检查（保持原有代码）
             if (_history.Count < 4)
             {
-                linearPositionError = 1145140721.0;
-                circularPositionError = 1145140721.0;
+                linearError = 1145140721.0;
+                circularError = 1145140721.0;
                 combinationError = 1145140721.0;
                 return;
             }
@@ -491,8 +501,8 @@ namespace IngameScript
             SimpleTargetInfo predictedCircularTarget = PredictCircularMotion(predictionTimeCicular, hasVelocityAvailable, p3_1, p3_2, pt);
 
             // 计算各自的误差
-            linearPositionError = (predictedLinearTarget.Position - p0.Position).Length() / predictionTimeLinear * 1000;
-            circularPositionError = (predictedCircularTarget.Position - p0.Position).Length() / predictionTimeCicular * 1000;
+            linearError = (predictedLinearTarget.Position - p0.Position).Length() / predictionTimeLinear * 1000;
+            circularError = (predictedCircularTarget.Position - p0.Position).Length() / predictionTimeCicular * 1000;
 
             // ----- 增量学习 -----
 
@@ -503,10 +513,10 @@ namespace IngameScript
             double targetLinearWeight, targetCircularWeight;
 
             // 基于误差比例计算目标权重
-            double errorSum = linearPositionError + circularPositionError;
+            double errorSum = linearError + circularError;
             // 误差越小，权重越大（反比关系）
-            targetLinearWeight = circularPositionError / errorSum;
-            targetCircularWeight = linearPositionError / errorSum;
+            targetLinearWeight = circularError / errorSum;
+            targetCircularWeight = linearError / errorSum;
 
             // 使用学习率应用增量更新
             linearWeight = linearWeight * (1 - learningRate) + targetLinearWeight * learningRate;
@@ -529,25 +539,25 @@ namespace IngameScript
             // 计算组合预测误差
             Vector3D combinedPosition = predictedLinearTarget.Position * linearWeight +
                                     predictedCircularTarget.Position * circularWeight;
-            combinationError = (combinedPosition - p0.Position).Length();// / predictionTimeCicular * 1000;
+            combinationError = (combinedPosition - p0.Position).Length() / predictionTimeCicular * 1000;
 
             // 异常保护
-            double minIndividualError = Math.Min(linearPositionError, circularPositionError);
-            if (combinationError > minIndividualError)
-            {
-                if (linearPositionError <= circularPositionError)
-                {
-                    linearWeight = 1.0;
-                    circularWeight = 0.0;
-                    combinationError = linearPositionError;
-                }
-                else
-                {
-                    linearWeight = 0.0;
-                    circularWeight = 1.0;
-                    combinationError = circularPositionError;
-                }
-            }
+            // double minIndividualError = Math.Min(linearError, circularError);
+            // if (combinationError > minIndividualError)
+            // {
+            //     if (linearError <= circularError)
+            //     {
+            //         linearWeight = 1.0;
+            //         circularWeight = 0.0;
+            //         combinationError = linearError;
+            //     }
+            //     else
+            //     {
+            //         linearWeight = 0.0;
+            //         circularWeight = 1.0;
+            //         combinationError = circularError;
+            //     }
+            // }
         }
         #endregion
 

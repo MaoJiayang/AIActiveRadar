@@ -66,7 +66,7 @@ namespace IngameScript
         
         // 计数器和参数
         private long 帧计数 = 0;
-        private long 当前时间戳ms { get { return 帧转毫秒(帧计数); } }
+        public long 当前时间戳ms { get { return 帧转毫秒(帧计数); } }
         private int 下一个目标ID = 1;
 
         public AI雷达(IMyFlightMovementBlock flightBlock, List<IMyOffensiveCombatBlock> combatBlocks, 参数管理器 参数管理器)
@@ -110,10 +110,10 @@ namespace IngameScript
                     {
                         战斗块.ApplyAction("ActivateBehavior_On");
                     }
-                    else
-                    {
-                        战斗块.ApplyAction("ActivateBehavior_Off");
-                    }
+                    // else
+                    // {
+                    //     战斗块.ApplyAction("ActivateBehavior_Off");
+                    // }
 
                     // IMyAttackPatternComponent 攻击模式;
                     // if (战斗块.TryGetSelectedAttackPattern(out 攻击模式))
@@ -311,7 +311,8 @@ namespace IngameScript
                 if (目标跟踪器表.ContainsKey(ID))
                 {
                     var 跟踪器 = 目标跟踪器表[ID];
-                    跟踪器.UpdateTarget(目标.Position, 当前时间戳ms);
+                    if (当前时间戳ms - 跟踪器.GetLatestTimeStamp() > 100)
+                        跟踪器.UpdateTarget(目标.Position, 当前时间戳ms);
                 }
             }
         }
@@ -370,12 +371,6 @@ namespace IngameScript
             if (战斗块列表 == null || 战斗块列表.Count == 0)
                 return;
 
-            // 关闭当前激活的攻击块
-            if (当前攻击块索引 < 战斗块列表.Count && 战斗块列表[当前攻击块索引] != null)
-            {
-                战斗块列表[当前攻击块索引].ApplyAction("ActivateBehavior_Off");
-            }
-
             // 切换到下一个攻击块
             当前攻击块索引 = (当前攻击块索引 + 1) % 战斗块列表.Count;
 
@@ -385,9 +380,13 @@ namespace IngameScript
             {
                 当前战斗块.ApplyAction("ActivateBehavior_On");
                 
-                // 切换优先级
-                当前优先级索引 = (当前优先级索引 + 1) % 优先级序列.Length;
-                当前战斗块.TargetPriority = 优先级序列[当前优先级索引];
+                // 基于攻击块索引和帧计数来计算优先级，确保不同攻击块在不同时间获得不同优先级
+                // 使用攻击块索引作为偏移，加上基于帧计数的增量，避免重复模式
+                int 优先级计算值 = (当前攻击块索引 + (int)(帧计数 / 战斗块列表.Count)) % 优先级序列.Length;
+                当前战斗块.TargetPriority = 优先级序列[优先级计算值];
+                
+                // 更新当前优先级索引用于状态显示
+                当前优先级索引 = 优先级计算值;
             }
         }
 
@@ -406,7 +405,7 @@ namespace IngameScript
         /// 获取所有跟踪中的目标
         /// </summary>
         /// <returns>目标字典，键为目标ID</returns>
-        public Dictionary<int, RadarTarget> GetAllTargets()
+        public Dictionary<int, RadarTarget> GetAllRawTargets()
         {
             return new Dictionary<int, RadarTarget>(跟踪目标表);
         }
@@ -449,6 +448,66 @@ namespace IngameScript
                 return 帧计数 - 跟踪目标表[targetId].LastUpdateTick;
             }
             return -1;
+        }
+
+        /// <summary>
+        /// 获取所有已确认目标的预测信息
+        /// </summary>
+        /// <returns>字典，键为目标ID，值为预测的目标信息</returns>
+        public Dictionary<int, SimpleTargetInfo> GetConfirmedTargetsPredicted()
+        {
+            var 预测目标字典 = new Dictionary<int, SimpleTargetInfo>();
+            
+            foreach (var 目标项 in 跟踪目标表)
+            {
+                var 目标 = 目标项.Value;
+                
+                // 只处理已确认和正在跟踪的目标
+                if (目标.State == TargetState.Confirmed || 目标.State == TargetState.Tracking)
+                {
+                    // 计算预测时间（当前帧数 - 上次更新时间）
+                    long 预测帧数 = 帧计数 - 目标.LastUpdateTick;
+                    long 预测时间ms = 帧转毫秒(预测帧数);
+                    
+                    // 如果有对应的跟踪器，进行预测
+                    if (目标跟踪器表.ContainsKey(目标.Id))
+                    {
+                        var 跟踪器 = 目标跟踪器表[目标.Id];
+                        var 预测信息 = 跟踪器.PredictFutureTargetInfo(预测时间ms, false);
+                        预测目标字典[目标.Id] = 预测信息;
+                    }
+                    else
+                    {
+                        // 没有跟踪器时，返回当前位置作为预测位置
+                        var 当前信息 = new SimpleTargetInfo(
+                            目标.Position, 
+                            Vector3D.Zero, 
+                            Vector3D.Zero, 
+                            当前时间戳ms
+                        );
+                        预测目标字典[目标.Id] = 当前信息;
+                    }
+                }
+            }
+            
+            return 预测目标字典;
+        }
+
+        public Dictionary<int, TargetTracker> GetConfirmedTargetTrackers()
+        {
+            var 已确认目标跟踪器 = new Dictionary<int, TargetTracker>();
+            foreach (var 目标项 in 跟踪目标表)
+            {
+                // 只添加已确认和正在跟踪的目标
+                if (目标项.Value.State == TargetState.Confirmed || 目标项.Value.State == TargetState.Tracking)
+                {
+                    if (目标跟踪器表.ContainsKey(目标项.Key))
+                    {
+                        已确认目标跟踪器[目标项.Key] = 目标跟踪器表[目标项.Key];
+                    }
+                }
+            }
+            return 已确认目标跟踪器;
         }
 
         /// <summary>

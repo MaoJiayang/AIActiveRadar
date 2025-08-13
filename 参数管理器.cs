@@ -10,6 +10,11 @@ namespace IngameScript
     /// </summary>
     public class 参数管理器
     {
+        #region 编组名称
+        public string AI雷达组名 = "AI雷达";
+        public string 参考驾驶舱标签 = "REF";
+        #endregion
+        
         #region 目标跟踪器参数
 
         /// <summary>

@@ -17,6 +17,7 @@ using VRage.Game.ModAPI.Ingame;
 using VRage.Game.ModAPI.Ingame.Utilities;
 using VRage.Game.ObjectBuilders.Definitions;
 using VRageMath;
+using IngameScript;
 
 namespace IngameScript
 {
@@ -26,6 +27,7 @@ namespace IngameScript
         private 参数管理器 参数们;
         private IMyFlightMovementBlock _flightBlock;
         private List<IMyOffensiveCombatBlock> _combatBlocks;
+        private HUD显示系统 _hud系统;
 
         #region 性能统计变量
         private double 总运行时间毫秒;
@@ -34,16 +36,18 @@ namespace IngameScript
         private StringBuilder 性能统计信息 = new StringBuilder();
         private string 性能统计信息缓存 = string.Empty;
         #endregion
+
         public Program()
         {
             // 1. 读取/写入自定义数据
             参数们 = new 参数管理器(Me);
 
             // 2. 搜索AI块
+            IMyBlockGroup 雷达组 = GridTerminalSystem.GetBlockGroupWithName(参数们.AI雷达组名);
             var flightBlocks = new List<IMyFlightMovementBlock>();
-            GridTerminalSystem.GetBlocksOfType(flightBlocks, b => b.CubeGrid == Me.CubeGrid);
+            雷达组.GetBlocksOfType(flightBlocks);
             var combatBlocks = new List<IMyOffensiveCombatBlock>();
-            GridTerminalSystem.GetBlocksOfType(combatBlocks, b => b.CubeGrid == Me.CubeGrid);
+            雷达组.GetBlocksOfType(combatBlocks);
 
             _flightBlock = flightBlocks.Count > 0 ? flightBlocks[0] : null;
             _combatBlocks = combatBlocks;
@@ -57,6 +61,8 @@ namespace IngameScript
             {
                 Echo("未找到AI飞行块或战斗块，脚本未启动。");
             }
+            _hud系统 = new HUD显示系统();
+            _hud系统.初始化(雷达组);
         }
 
         public void Save()
@@ -79,7 +85,7 @@ namespace IngameScript
             // Echo(_radar.GetRadarStatus());
 
             // 打印所有目标id和距离
-            var allTargets = _radar.GetAllTargets();
+            var allTargets = _radar.GetAllRawTargets();
             var myPos = Me.GetPosition();
             Echo("目标列表:");
             foreach (var kv in allTargets)
@@ -88,13 +94,19 @@ namespace IngameScript
                 double dist = Vector3D.Distance(myPos, t.Position);
                 Echo($"===ID:{t.Id}===\n距离:{dist:F1}m\n状态:{t.State}\n上次更新:{t.LastUpdateTick}");
             }
+            Echo($"已激活HUD: {_hud系统.已初始化}");
+            if (_hud系统.已初始化)
+            {
+                // 准备数据：id->预测位置
+                Dictionary<int, SimpleTargetInfo> raw = _radar.GetConfirmedTargetsPredicted();
+                Dictionary<int, TargetTracker> trackers = _radar.GetConfirmedTargetTrackers();
+                _hud系统.绘制(raw, trackers);
+            }
             更新性能统计信息();
             if (运行次数 % 20 == 0) 性能统计信息缓存 = 性能统计信息.ToString();
             Echo(性能统计信息缓存);
-
-
         }
-
+        
         #region 性能统计
         /// <summary>
         /// 更新运行性能统计信息

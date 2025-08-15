@@ -542,22 +542,22 @@ namespace IngameScript
             combinationError = (combinedPosition - p0.Position).Length() / predictionTimeCicular * 1000;
 
             // 异常保护
-            // double minIndividualError = Math.Min(linearError, circularError);
-            // if (combinationError > minIndividualError)
-            // {
-            //     if (linearError <= circularError)
-            //     {
-            //         linearWeight = 1.0;
-            //         circularWeight = 0.0;
-            //         combinationError = linearError;
-            //     }
-            //     else
-            //     {
-            //         linearWeight = 0.0;
-            //         circularWeight = 1.0;
-            //         combinationError = circularError;
-            //     }
-            // }
+            double minIndividualError = Math.Min(linearError, circularError);
+            if (combinationError > minIndividualError)
+            {
+                if (linearError <= circularError)
+                {
+                    linearWeight = 1.0;
+                    circularWeight = 0.0;
+                    combinationError = linearError;
+                }
+                else
+                {
+                    linearWeight = 0.0;
+                    circularWeight = 1.0;
+                    combinationError = circularError;
+                }
+            }
         }
         #endregion
 

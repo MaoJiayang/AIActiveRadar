@@ -37,6 +37,10 @@ namespace IngameScript
         private string 性能统计信息缓存 = string.Empty;
         #endregion
 
+        #region 状态变量
+        private bool 辅助瞄准开启 = false;
+        #endregion
+
         public Program()
         {
             // 1. 读取/写入自定义数据
@@ -61,7 +65,7 @@ namespace IngameScript
             {
                 Echo("未找到AI飞行块或战斗块，脚本未启动。");
             }
-            _hud系统 = new HUD显示系统();
+            _hud系统 = new HUD显示系统(参数们);
             _hud系统.初始化(雷达组);
         }
 
@@ -77,7 +81,7 @@ namespace IngameScript
                 Echo("AI雷达未初始化。");
                 return;
             }
-
+            处理参数(argument);
             // 更新雷达
             _radar.Update();
 
@@ -95,18 +99,29 @@ namespace IngameScript
                 Echo($"===ID:{t.Id}===\n距离:{dist:F1}m\n状态:{t.State}\n上次更新:{t.LastUpdateTick}");
             }
             Echo($"已激活HUD: {_hud系统.已初始化}");
+            Echo($"辅助瞄准已{(辅助瞄准开启 ? "开启" : "关闭")}");
             if (_hud系统.已初始化)
             {
                 // 准备数据：id->预测位置
                 Dictionary<int, SimpleTargetInfo> raw = _radar.GetConfirmedTargetsPredicted();
                 Dictionary<int, TargetTracker> trackers = _radar.GetConfirmedTargetTrackers();
-                _hud系统.绘制(raw, trackers);
+                _hud系统.绘制(raw, trackers, Echo);
             }
             更新性能统计信息();
             if (运行次数 % 20 == 0) 性能统计信息缓存 = 性能统计信息.ToString();
             Echo(性能统计信息缓存);
         }
-        
+        private void 处理参数(string argument)
+        {
+            if (string.IsNullOrWhiteSpace(argument))
+                return;
+            if(argument == "toggle_aim_assist")
+            {
+                辅助瞄准开启 = !辅助瞄准开启;
+                return;
+            }
+        }
+
         #region 性能统计
         /// <summary>
         /// 更新运行性能统计信息

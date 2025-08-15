@@ -311,7 +311,7 @@ namespace IngameScript
                 if (目标跟踪器表.ContainsKey(ID))
                 {
                     var 跟踪器 = 目标跟踪器表[ID];
-                    if (当前时间戳ms - 跟踪器.GetLatestTimeStamp() > 100)
+                    if (当前时间戳ms - 跟踪器.GetLatestTimeStamp() > 150) // 避免过度更新引入噪声
                         跟踪器.UpdateTarget(目标.Position, 当前时间戳ms);
                 }
             }

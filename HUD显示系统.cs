@@ -5,6 +5,7 @@ using VRageMath;
 using System.Collections.Generic;
 using Vector2 = VRageMath.Vector2;
 using System;
+using VRage.Game;
 
 namespace IngameScript
 {
@@ -13,15 +14,20 @@ namespace IngameScript
     /// </summary>
     public class HUD显示系统
     {
+        private 参数管理器 参数们;
         private IMyCockpit 参考驾驶舱;
         private List<IMyTextPanel> LCD列表 = new List<IMyTextPanel>();
         public bool 已初始化 = false;
-        private const float LCD物理宽度 = 2.5f;
-        private const float LCD物理高度 = 2.5f;
+        private float LCD物理宽度 = 2.5f;
+        private float LCD物理高度 = 2.5f;
         public int 视线选定目标ID { get; private set; } = -1;
         private MySpriteDrawFrame 选定绘制帧;
         private double 前向最小夹角 = double.MaxValue;
-        /// <summary>
+        public HUD显示系统(参数管理器 参数们)
+        {
+            this.参数们 = 参数们;
+        }
+
         /// 初始化 HUD 系统，必须先调用
         /// </summary>
         public void 初始化(IMyBlockGroup HUD组)
@@ -39,6 +45,16 @@ namespace IngameScript
                     lcd.Script = string.Empty;
                 }
             }
+            if (参考驾驶舱.CubeGrid.GridSizeEnum == MyCubeSize.Small)
+            {
+                LCD物理宽度 = 0.5f;
+                LCD物理高度 = 0.5f;
+            }
+            else if (参考驾驶舱.CubeGrid.GridSizeEnum == MyCubeSize.Large)
+            {
+                LCD物理宽度 = 2.5f;
+                LCD物理高度 = 2.5f;
+            }
         }
 
         // 目标-屏幕-绘制位置映射类
@@ -54,7 +70,7 @@ namespace IngameScript
         /// <summary>
         /// 根据目标位置字典绘制 HUD
         /// </summary>
-        public void 绘制(Dictionary<int, SimpleTargetInfo> 目标字典,Dictionary<int, TargetTracker> 目标跟踪器字典 = null)
+        public void 绘制(Dictionary<int, SimpleTargetInfo> 目标字典, Dictionary<int, TargetTracker> 目标跟踪器字典 = null, Action<string> Echo = null)
         {
             if (!已初始化) return;
             var 驾驶舱位置 = 参考驾驶舱.GetPosition();
@@ -75,7 +91,7 @@ namespace IngameScript
                     var lcd位置 = lcd.GetPosition();
                     var surfaceSize = lcd.SurfaceSize;
                     var 屏显位置 = World到屏幕(驾驶舱位置, lcd位置, lcd世界矩阵, kv.Value.Position, surfaceSize);
-                    
+
                     if (屏显位置.HasValue)
                     {
                         // 找到第一个能显示的屏幕，记录目标-屏幕-绘制位置对
@@ -117,50 +133,27 @@ namespace IngameScript
                         {
                             if (绘制信息.目标ID == 视线选定目标ID)
                             {
-                                绘制重点目标(frame, 绘制信息.绘制位置, 绘制信息.目标ID, 绘制信息.目标信息, 绘制信息.距离);
+                                绘制选定目标(frame, 绘制信息.绘制位置, 绘制信息.目标ID, 绘制信息.目标信息, 绘制信息.距离);
                                 if (视线选定目标ID != -1 && 目标跟踪器字典 != null)
                                 {
                                     TargetTracker 选定目标跟踪器 = 目标跟踪器字典[视线选定目标ID];
                                     SimpleTargetInfo 选定目标信息 = 目标字典[视线选定目标ID];
                                     double 弹道拦截时间;
-                                    Vector3D 预测落点 = 弹道计算器.计算预测位置(参考驾驶舱, 选定目标跟踪器, 选定目标信息, out 弹道拦截时间);
+                                    Vector3D 预测落点 = 弹道计算器.计算预测位置(参考驾驶舱, 选定目标跟踪器, 选定目标信息, out 弹道拦截时间, 参数们.武器弹速);
                                     double 综合预测误差 = 选定目标跟踪器.combinationError * 弹道拦截时间;
-                                    // 计算误差圆的屏幕半径
-                                    // 先计算预测落点到驾驶舱的距离
-                                    double 落点距离 = Vector3D.Distance(参考驾驶舱.GetPosition(), 预测落点);
-                                    // 计算误差在该距离上对应的角度（弧度）
-                                    double 误差角度 = 综合预测误差 / 落点距离;
-                                    // 转换为屏幕像素半径（近似计算）
-                                    float 屏幕半径 = (float)(误差角度 * lcd.SurfaceSize.X / (2 * Math.PI)) * LCD物理宽度;
-                                    // 限制最小和最大半径
-                                    屏幕半径 = Math.Max(20, Math.Min(屏幕半径, 50)); 
-                                    var screenPos = World到屏幕(参考驾驶舱.GetPosition(), lcd.GetPosition(), lcd.WorldMatrix, 预测落点, lcd.SurfaceSize);
+                                    Vector2? screenPos = World到屏幕(参考驾驶舱.GetPosition(), lcd.GetPosition(), lcd.WorldMatrix, 预测落点, lcd.SurfaceSize);
                                     if (screenPos.HasValue)
                                     {
-                                        // 绘制预测落点 - 空心红色圆
-                                        frame.Add(new MySprite
-                                        {
-                                            Type = SpriteType.TEXTURE,
-                                            Data = "CircleHollow",
-                                            Position = screenPos.Value,
-                                            Size = new VRageMath.Vector2(屏幕半径 * 2, 屏幕半径 * 2),
-                                            Color = Color.Red,
-                                            Alignment = TextAlignment.CENTER
-                                        });
-                                        // 绘制文字，位置在方块右边，垂直居中对齐
-                                        double 圆周权重 = 选定目标跟踪器.circularWeight;
-                                        double 线性权重 = 选定目标跟踪器.linearWeight;
-                                        frame.Add(new MySprite
-                                        {
-                                            Type = SpriteType.TEXT,
-                                            Data = $"C: {圆周权重:F1}\nL: {线性权重:F1}",
-                                            Position = screenPos.Value + new VRageMath.Vector2(-30, 20),
-                                            Color = Color.Red,
-                                            FontId = "White",
-                                            Alignment = TextAlignment.RIGHT,
-                                            RotationOrScale = 0.618f
-                                        });
+                                        绘制预瞄点(frame, lcd, screenPos.Value, 预测落点, 选定目标跟踪器, 弹道拦截时间);
                                     }
+                                    List<Vector2> 屏幕轨迹点列表 = new List<Vector2>();
+                                    for (int i = 0; i < 选定目标跟踪器.GetHistoryCount(); i++)
+                                    {
+                                        SimpleTargetInfo? lastPos = 选定目标跟踪器.GetTargetInfoAt(i);
+                                        Vector2? 屏幕位置 = World到屏幕(参考驾驶舱.GetPosition(), lcd.GetPosition(), lcd.WorldMatrix, lastPos.Value.Position, lcd.SurfaceSize);
+                                        if (屏幕位置.HasValue) 屏幕轨迹点列表.Add(屏幕位置.Value);
+                                    }
+                                    绘制轨迹点(frame, lcd, 屏幕轨迹点列表);
                                 }
                             }
                             else
@@ -196,6 +189,7 @@ namespace IngameScript
             double ly = Vector3D.Dot(local, lcdUp);
             float x = (float)(lx / LCD物理宽度 + 0.5) * surfaceSize.X;
             float y = (float)(-ly / LCD物理高度 + 0.5) * surfaceSize.Y;
+            if (参考驾驶舱.CubeGrid.GridSizeEnum == MyCubeSize.Small) y -= 512;
             if (x < 0 || x > surfaceSize.X || y < 0 || y > surfaceSize.Y) return null;
 
             return new VRageMath.Vector2(x, y);
@@ -209,7 +203,7 @@ namespace IngameScript
             {
                 前向最小夹角 = angle;
                 视线选定目标ID = 目标id;
-            }            
+            }
         }
         // 绘制单个目标标记
         private void 绘制普通标记(MySpriteDrawFrame frame, VRageMath.Vector2 pos, int id, double dist)
@@ -235,10 +229,10 @@ namespace IngameScript
             });
         }
         // 绘制重点目标（离准心最近的目标）- 修正方框绘制
-        private void 绘制重点目标(MySpriteDrawFrame frame, VRageMath.Vector2 pos, int id, SimpleTargetInfo target, double dist)
+        private void 绘制选定目标(MySpriteDrawFrame frame, VRageMath.Vector2 pos, int id, SimpleTargetInfo target, double dist)
         {
             double 目标速度 = target.Velocity.Length();
-            
+
             // 绘制空心正方形
             frame.Add(new MySprite
             {
@@ -249,7 +243,15 @@ namespace IngameScript
                 Color = Color.Red,
                 Alignment = TextAlignment.CENTER
             });
-            
+            frame.Add(new MySprite
+            {
+                Type = SpriteType.TEXTURE,
+                Data = "Cross",
+                Position = pos,
+                Size = new VRageMath.Vector2(6, 6),
+                Color = Color.Red,
+                Alignment = TextAlignment.CENTER
+            });
             // 绘制文字，位置在方块右边，垂直居中对齐
             frame.Add(new MySprite
             {
@@ -261,6 +263,71 @@ namespace IngameScript
                 Alignment = TextAlignment.LEFT,
                 RotationOrScale = 1.0f
             });
+        }
+        /// <summary>
+        /// 绘制预瞄点
+        /// </summary>
+        private void 绘制预瞄点(MySpriteDrawFrame frame, IMyTextPanel lcd, VRageMath.Vector2 screenPos, Vector3D predictedPoint, TargetTracker tracker, double interceptTime)
+        {
+            // 计算综合预测误差和误差圆半径
+            double totalError = tracker.combinationError * interceptTime;
+            double pointDist = Vector3D.Distance(参考驾驶舱.GetPosition(), predictedPoint);
+            if (pointDist < 1e-6) return;
+            double errorAngle = totalError / pointDist;
+            var surfaceSize = lcd.SurfaceSize;
+            // 近似转换为屏幕像素半径
+            float radius = (float)(errorAngle * surfaceSize.X / (2 * Math.PI) * LCD物理宽度);
+            // 限制半径范围
+            radius = Math.Max(12, Math.Min(radius, 50));
+            // 绘制空心圆
+            frame.Add(new MySprite
+            {
+                Type = SpriteType.TEXTURE,
+                Data = "CircleHollow",
+                Position = screenPos,
+                Size = new VRageMath.Vector2(radius * 2, radius * 2),
+                Color = Color.Red,
+                Alignment = TextAlignment.CENTER
+            });
+            frame.Add(new MySprite
+            {
+                Type = SpriteType.TEXTURE,
+                Data = "CircleHollow",
+                Position = screenPos,
+                Size = new VRageMath.Vector2(radius * 2 + 2, radius * 2 + 2),
+                Color = Color.Red,
+                Alignment = TextAlignment.CENTER
+            });
+            // 绘制权重信息
+            double cw = tracker.circularWeight;
+            double lw = tracker.linearWeight;
+            frame.Add(new MySprite
+            {
+                Type = SpriteType.TEXT,
+                Data = $"Cir: {cw:F2}\nLin: {lw:F2}\nErr: {totalError:F0}m",
+                Position = new VRageMath.Vector2(75, 10),
+                Color = Color.Green,
+                FontId = "White",
+                Alignment = TextAlignment.RIGHT,
+                RotationOrScale = 0.618f
+            });
+        }
+        private void 绘制轨迹点(MySpriteDrawFrame frame, IMyTextPanel lcd, List<Vector2> 屏幕轨迹点列表)
+        {   
+            for (int i = 0; i < 屏幕轨迹点列表.Count; i++)
+            {
+                float 轨迹点大小 = Math.Min(Math.Max((屏幕轨迹点列表.Count - i) * 1.5f, 2f), 8f);
+                Vector2 point = 屏幕轨迹点列表[i];
+                frame.Add(new MySprite
+                {
+                    Type = SpriteType.TEXTURE,
+                    Data = "Circle",
+                    Position = point,
+                    Size = new VRageMath.Vector2(轨迹点大小, 轨迹点大小),
+                    Color = Color.Green,
+                    Alignment = TextAlignment.CENTER
+                });
+            }
         }
     }
 }

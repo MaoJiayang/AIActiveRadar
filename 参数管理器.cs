@@ -20,7 +20,7 @@ namespace IngameScript
         /// <summary>
         /// 目标历史记录最大长度
         /// </summary>
-        public int 目标历史最大长度 { get; set; } = 4;
+        public int 目标历史最大长度 { get; set; } = 5;
 
         #endregion
 
@@ -55,7 +55,10 @@ namespace IngameScript
         public int 目标丢失超时帧数 { get; set; } = 91;
         public int 暂定目标超时帧数 { get; set; } = 91;
         public int 跟踪器更新最低间隔 { get; set; } = 20;
+        #endregion
 
+        #region 火控参数
+        public double 武器弹速 { get; set; } = 500.0; // 米/秒
         #endregion
         #region 构造函数
 
@@ -148,6 +151,9 @@ namespace IngameScript
                     case "暂定目标超时帧数":
                         暂定目标超时帧数 = int.Parse(参数值);
                         break;
+                    case "武器弹速":
+                        武器弹速 = double.Parse(参数值);
+                        break;
                 }
             }
             catch (Exception)
@@ -183,6 +189,8 @@ namespace IngameScript
             配置.AppendLine($"目标丢失超时帧数={目标丢失超时帧数}");
             配置.AppendLine($"暂定目标超时帧数={暂定目标超时帧数}");
             配置.AppendLine();
+            配置.AppendLine("// 火控参数");
+            配置.AppendLine($"武器弹速={武器弹速}");
             return 配置.ToString();
         }
 

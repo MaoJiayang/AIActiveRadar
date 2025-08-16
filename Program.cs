@@ -109,22 +109,24 @@ namespace IngameScript
                 // 准备数据：id->预测位置
                 Dictionary<int, SimpleTargetInfo> raw = _radar.GetConfirmedTargetsPredicted();
                 Dictionary<int, TargetTracker> trackers = _radar.GetConfirmedTargetTrackers();
-                _hud系统.更新视线选定目标ID(raw);
                 弹道显示信息 弹道显示 = null;
-                if (_hud系统.视线选定目标ID != -1)
+                Vector3D 弹道预测点 = Vector3D.Zero;
+                if (raw.ContainsKey(_hud系统.视线选定目标ID))
                 {
                     double 弹道拦截时间;
-                    Vector3D 弹道预测点 = _radar.计算弹道(_hud系统.视线选定目标ID,
+                    弹道预测点 = _radar.计算弹道(_hud系统.视线选定目标ID,
                                                                 参数们.武器弹速,
                                                                 _hud系统.参考驾驶舱,
                                                                 out 弹道拦截时间,
                                                                 弹药受重力影响: true);
                     弹道显示 = new 弹道显示信息(弹道预测点, 弹道拦截时间, trackers[_hud系统.视线选定目标ID]);
+                    // Echo($"弹道预测落点：X {弹道预测点.X:F1} Y {弹道预测点.Y:F1} Z {弹道预测点.Z:F1}");
                     if (辅助瞄准开启 && 辅助瞄准.硬件就绪 && 弹道预测点 != Vector3D.Zero)
                     {
                         辅助瞄准.点瞄准(弹道预测点);
                     }
                 }
+                _hud系统.更新视线选定目标ID(raw, 弹道预测点);
                 _hud系统.绘制(raw, 弹道显示);
             }
 

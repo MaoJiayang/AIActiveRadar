@@ -94,9 +94,12 @@ namespace IngameScript
                 LCD物理高度 = 2.5f;
             }
         }
-        public void 更新视线选定目标ID(Dictionary<int, SimpleTargetInfo> 目标字典)
+        public void 更新视线选定目标ID(Dictionary<int, SimpleTargetInfo> 目标字典, Vector3D? 选定弹道预测 = null)
         {
+            int 上次选定目标ID = 视线选定目标ID;
             视线选定目标ID = -1;
+            前向最小夹角 = double.MaxValue;
+            if (目标字典.Count == 0) return;
             foreach (var 目标 in 目标字典)
             {
                 Vector3D toTarget = 目标.Value.Position - 参考驾驶舱.GetPosition();
@@ -108,6 +111,16 @@ namespace IngameScript
                     视线选定目标ID = 目标id;
                 }
             }
+            if (选定弹道预测.HasValue && 选定弹道预测.Value != Vector3D.Zero && 目标字典.ContainsKey(上次选定目标ID)) // 不让新目标抢走预瞄点选择
+            {
+                Vector3D toAim = 选定弹道预测.Value - 参考驾驶舱.GetPosition();
+                double angle = Vector3D.Angle(toAim, 参考驾驶舱.WorldMatrix.Forward);
+                if (angle < 前向最小夹角 * 2) // 允许预瞄点选择抢走目标,容差两倍
+                {
+                    前向最小夹角 = angle;
+                    视线选定目标ID = 上次选定目标ID;
+                }
+            }
         }
         /// <summary>
         /// 根据目标位置字典绘制 HUD
@@ -116,7 +129,6 @@ namespace IngameScript
         {
             if (!已初始化) return;
             var 驾驶舱位置 = 参考驾驶舱.GetPosition();
-            前向最小夹角 = double.MaxValue;
 
             // 0. 建立目标-屏幕-绘制位置映射表
             List<目标绘制信息> 目标绘制映射表 = new List<目标绘制信息>();

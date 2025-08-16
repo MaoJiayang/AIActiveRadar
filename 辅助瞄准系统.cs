@@ -151,13 +151,16 @@ namespace IngameScript
         {
             // 检查角度误差是否在阈值范围内
             double 角度误差大小 = 目标角度PYR.Length();
+            double 滚转输入 = 控制器.RollIndicator > 0 ? 陀螺仪最高转速 :
+                              控制器.RollIndicator < 0 ? -陀螺仪最高转速 : 0.0;
+            // Vector2 俯仰输入  = 控制器.RotationIndicator;
             if (角度误差大小 < 参数们.角度容差 && !角度误差在容忍范围内)
             {
                 // 角度误差很小，停止陀螺仪以减少抖动
                 foreach (var 陀螺仪 in 陀螺仪列表)
                 {
                     Vector3D 陀螺仪本地命令 = Vector3D.Zero;
-                    陀螺仪本地命令 = 加入本地滚转(陀螺仪, 陀螺仪本地命令, 控制器, 参数们.常驻滚转转速);
+                    陀螺仪本地命令 = 加入本地滚转(陀螺仪, 陀螺仪本地命令, 控制器, 参数们.常驻滚转转速 + 滚转输入);
                     施加本地转速指令(陀螺仪, 陀螺仪本地命令);
                 }
                 // 重置所有PID控制器
@@ -185,7 +188,7 @@ namespace IngameScript
             {
                 // 使用陀螺仪世界矩阵将世界坐标的角速度转换为陀螺仪局部坐标系
                 Vector3D 陀螺仪本地转速命令 = Vector3D.TransformNormal(最终旋转命令PYR, MatrixD.Transpose(陀螺仪.WorldMatrix));
-                陀螺仪本地转速命令 = 加入本地滚转(陀螺仪, 陀螺仪本地转速命令, 控制器, 参数们.常驻滚转转速);
+                陀螺仪本地转速命令 = 加入本地滚转(陀螺仪, 陀螺仪本地转速命令, 控制器, 参数们.常驻滚转转速 + 滚转输入);
                 施加本地转速指令(陀螺仪, 陀螺仪本地转速命令);
             }
         }
@@ -213,7 +216,7 @@ namespace IngameScript
         private Vector3D 加入本地滚转(IMyGyro 陀螺仪, Vector3D 陀螺仪本地命令, IMyShipController 控制器, double 弧度每秒 = 0.0)
         {
             Vector3D 该陀螺仪点积 = 陀螺仪对轴(陀螺仪, 控制器);
-            // if (弧度每秒 < 参数们.最小向量长度)
+            // if (弧度每秒 < 1e-6)
             // {
             //     return 陀螺仪本地命令; // 不需要滚转
             // }

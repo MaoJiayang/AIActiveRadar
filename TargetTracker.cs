@@ -545,6 +545,9 @@ namespace IngameScript
             double minIndividualError = Math.Min(linearError, circularError);
             if (combinationError > minIndividualError)
             {
+                // linearWeight = 1.0;
+                // circularWeight = 0.0;
+                combinationError = linearError;
                 if (linearError <= circularError)
                 {
                     linearWeight = 1.0;

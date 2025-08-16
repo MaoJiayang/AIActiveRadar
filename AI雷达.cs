@@ -100,7 +100,6 @@ namespace IngameScript
                 var 战斗块 = 战斗块列表[i];
                 if (战斗块 != null)
                 {
-                    战斗块.TargetPriority = 参数们.目标优先级;
                     战斗块.UpdateTargetInterval = 参数们.战斗块更新间隔正常;
                     战斗块.Enabled = true;
                     战斗块.SelectedAttackPattern = 参数们.战斗块攻击模式;
@@ -439,7 +438,7 @@ namespace IngameScript
         }
 
         /// <summary>
-        /// 获取目标的上次更新距离当前的帧数
+        /// 获取目标的上次扫描更新距离当前的帧数
         /// </summary>
         public long GetTargetUpdateAge(int targetId)
         {
@@ -509,7 +508,21 @@ namespace IngameScript
             }
             return 已确认目标跟踪器;
         }
-
+        public Vector3D 计算弹道(int 目标ID, double 武器弹速, IMyShipController 参考驾驶舱, out double 弹道拦截时间, Vector3D? 参考位置 = null, bool 弹药受重力影响 = true)
+        {
+            弹道拦截时间 = -1.0;
+            Vector3D 预测落点 = Vector3D.Zero;
+            if (目标跟踪器表.ContainsKey(目标ID))
+            {
+                TargetTracker 选定目标跟踪器 = 目标跟踪器表[目标ID];
+                // RadarTarget 雷达目标信息 = 跟踪目标表[目标ID];
+                long 更新时间差 = Math.Max(0, 当前时间戳ms - 选定目标跟踪器.GetLatestTimeStamp());
+                SimpleTargetInfo 选定目标信息 = 选定目标跟踪器.PredictFutureTargetInfo(更新时间差, false);
+                // 选定目标信息.Position = 雷达目标信息.Position; // 确保使用最新位置，过一遍预测是为了获取其他物理量的估算值
+                预测落点 = 弹道计算器.计算预测位置(参考驾驶舱, 选定目标跟踪器, 选定目标信息, out 弹道拦截时间, 参考位置, 武器弹速, 弹药受重力影响: 弹药受重力影响);
+            }
+            return 预测落点;
+        }
         /// <summary>
         /// 预测目标未来位置
         /// </summary>

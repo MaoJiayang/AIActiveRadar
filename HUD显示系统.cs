@@ -6,23 +6,60 @@ using System.Collections.Generic;
 using Vector2 = VRageMath.Vector2;
 using System;
 using VRage.Game;
+using System.Linq;
 
 namespace IngameScript
 {
+    public class 弹道显示信息
+    {
+        public Vector3D 弹道预测点;
+        public double 弹道拦截时间;
+        public TargetTracker 选定目标跟踪器;
+
+        public List<SimpleTargetInfo> 目标历史轨迹
+        {
+            get
+            {
+                List<SimpleTargetInfo> res = new List<SimpleTargetInfo>();
+                if (选定目标跟踪器.GetHistoryCount() == 0) return res;
+                for (int i = 0; i < 选定目标跟踪器.GetHistoryCount(); i++)
+                {
+                    var info = 选定目标跟踪器.GetTargetInfoAt(i);
+                    if (info.HasValue) res.Add(info.Value);
+                }
+                return res;
+            }
+        }
+
+        public 弹道显示信息(Vector3D 弹道预测, double 弹道拦截时间, TargetTracker 选定目标跟踪器)
+        {
+            this.弹道预测点 = 弹道预测;
+            this.弹道拦截时间 = 弹道拦截时间;
+            this.选定目标跟踪器 = 选定目标跟踪器;
+        }
+    }
     /// <summary>
     /// HUD 系统 - 单独管理 LCD HUD 显示
     /// </summary>
     public class HUD显示系统
     {
         private 参数管理器 参数们;
-        private IMyCockpit 参考驾驶舱;
         private List<IMyTextPanel> LCD列表 = new List<IMyTextPanel>();
         public bool 已初始化 = false;
         private float LCD物理宽度 = 2.5f;
         private float LCD物理高度 = 2.5f;
+        public IMyShipController 参考驾驶舱 { get; private set; }
         public int 视线选定目标ID { get; private set; } = -1;
-        private MySpriteDrawFrame 选定绘制帧;
         private double 前向最小夹角 = double.MaxValue;
+        // 目标-屏幕-绘制位置映射类
+        private struct 目标绘制信息
+        {
+            public int 目标ID;
+            public SimpleTargetInfo 目标信息;
+            public IMyTextPanel LCD屏幕;
+            public Vector2 绘制位置;
+            public double 距离;
+        }
         public HUD显示系统(参数管理器 参数们)
         {
             this.参数们 = 参数们;
@@ -32,9 +69,10 @@ namespace IngameScript
         /// </summary>
         public void 初始化(IMyBlockGroup HUD组)
         {
-            List<IMyCockpit> 驾驶舱列表 = new List<IMyCockpit>();
-            HUD组.GetBlocksOfType(驾驶舱列表);
-            参考驾驶舱 = 驾驶舱列表[0];
+            List<IMyShipController> 驾驶舱列表 = new List<IMyShipController>();
+            HUD组.GetBlocksOfType(驾驶舱列表, block => block.CustomName.Contains(参数们.参考驾驶舱标签));
+            if (驾驶舱列表.Count > 0) 参考驾驶舱 = 驾驶舱列表[0];
+
             HUD组.GetBlocksOfType(LCD列表);
             已初始化 = 参考驾驶舱 != null && LCD列表 != null && LCD列表.Count > 0;
             if (已初始化)
@@ -56,33 +94,35 @@ namespace IngameScript
                 LCD物理高度 = 2.5f;
             }
         }
-
-        // 目标-屏幕-绘制位置映射类
-        private class 目标绘制信息
+        public void 更新视线选定目标ID(Dictionary<int, SimpleTargetInfo> 目标字典)
         {
-            public int 目标ID;
-            public SimpleTargetInfo 目标信息;
-            public IMyTextPanel LCD屏幕;
-            public VRageMath.Vector2 绘制位置;
-            public double 距离;
+            视线选定目标ID = -1;
+            foreach (var 目标 in 目标字典)
+            {
+                Vector3D toTarget = 目标.Value.Position - 参考驾驶舱.GetPosition();
+                int 目标id = 目标.Key;
+                double angle = Vector3D.Angle(toTarget, 参考驾驶舱.WorldMatrix.Forward);
+                if (angle < 前向最小夹角)
+                {
+                    前向最小夹角 = angle;
+                    视线选定目标ID = 目标id;
+                }
+            }
         }
-
         /// <summary>
         /// 根据目标位置字典绘制 HUD
         /// </summary>
-        public void 绘制(Dictionary<int, SimpleTargetInfo> 目标字典, Dictionary<int, TargetTracker> 目标跟踪器字典 = null, Action<string> Echo = null)
+        public void 绘制(Dictionary<int, SimpleTargetInfo> 目标字典, 弹道显示信息 弹道信息 = null)
         {
             if (!已初始化) return;
             var 驾驶舱位置 = 参考驾驶舱.GetPosition();
             前向最小夹角 = double.MaxValue;
-            视线选定目标ID = -1;
 
             // 0. 建立目标-屏幕-绘制位置映射表
-            var 目标绘制映射表 = new List<目标绘制信息>();
+            List<目标绘制信息> 目标绘制映射表 = new List<目标绘制信息>();
             // 1. 外层循环对于每个目标，更新一遍重点目标ID
             foreach (var kv in 目标字典)
             {
-                更新重点目标ID(参考驾驶舱, kv);
                 // 2. 对于每个目标，内层对于每个屏幕，循环到第一个非null绘制位置的屏幕
                 foreach (var lcd in LCD列表)
                 {
@@ -134,23 +174,17 @@ namespace IngameScript
                             if (绘制信息.目标ID == 视线选定目标ID)
                             {
                                 绘制选定目标(frame, 绘制信息.绘制位置, 绘制信息.目标ID, 绘制信息.目标信息, 绘制信息.距离);
-                                if (视线选定目标ID != -1 && 目标跟踪器字典 != null)
+                                if (视线选定目标ID != -1 && 弹道信息 != null)
                                 {
-                                    TargetTracker 选定目标跟踪器 = 目标跟踪器字典[视线选定目标ID];
-                                    SimpleTargetInfo 选定目标信息 = 目标字典[视线选定目标ID];
-                                    double 弹道拦截时间;
-                                    Vector3D 预测落点 = 弹道计算器.计算预测位置(参考驾驶舱, 选定目标跟踪器, 选定目标信息, out 弹道拦截时间, 参数们.武器弹速);
-                                    double 综合预测误差 = 选定目标跟踪器.combinationError * 弹道拦截时间;
-                                    Vector2? screenPos = World到屏幕(参考驾驶舱.GetPosition(), lcd.GetPosition(), lcd.WorldMatrix, 预测落点, lcd.SurfaceSize);
+                                    Vector2? screenPos = World到屏幕(参考驾驶舱.GetPosition(), lcd.GetPosition(), lcd.WorldMatrix, 弹道信息.弹道预测点, lcd.SurfaceSize);
                                     if (screenPos.HasValue)
                                     {
-                                        绘制预瞄点(frame, lcd, screenPos.Value, 预测落点, 选定目标跟踪器, 弹道拦截时间);
+                                        绘制预瞄点(frame, lcd, screenPos.Value, 弹道信息.弹道预测点, 弹道信息.选定目标跟踪器, 弹道信息.弹道拦截时间);
                                     }
                                     List<Vector2> 屏幕轨迹点列表 = new List<Vector2>();
-                                    for (int i = 0; i < 选定目标跟踪器.GetHistoryCount(); i++)
+                                    foreach (SimpleTargetInfo 轨迹点 in 弹道信息.目标历史轨迹)
                                     {
-                                        SimpleTargetInfo? lastPos = 选定目标跟踪器.GetTargetInfoAt(i);
-                                        Vector2? 屏幕位置 = World到屏幕(参考驾驶舱.GetPosition(), lcd.GetPosition(), lcd.WorldMatrix, lastPos.Value.Position, lcd.SurfaceSize);
+                                        Vector2? 屏幕位置 = World到屏幕(参考驾驶舱.GetPosition(), lcd.GetPosition(), lcd.WorldMatrix, 轨迹点.Position, lcd.SurfaceSize);
                                         if (屏幕位置.HasValue) 屏幕轨迹点列表.Add(屏幕位置.Value);
                                     }
                                     绘制轨迹点(frame, lcd, 屏幕轨迹点列表);
@@ -194,17 +228,7 @@ namespace IngameScript
 
             return new VRageMath.Vector2(x, y);
         }
-        private void 更新重点目标ID(IMyCockpit 驾驶舱, KeyValuePair<int, SimpleTargetInfo> 目标)
-        {
-            Vector3D toTarget = 目标.Value.Position - 驾驶舱.GetPosition();
-            int 目标id = 目标.Key;
-            double angle = Vector3D.Angle(toTarget, 驾驶舱.WorldMatrix.Forward);
-            if (angle < 前向最小夹角)
-            {
-                前向最小夹角 = angle;
-                视线选定目标ID = 目标id;
-            }
-        }
+
         // 绘制单个目标标记
         private void 绘制普通标记(MySpriteDrawFrame frame, VRageMath.Vector2 pos, int id, double dist)
         {
@@ -313,7 +337,7 @@ namespace IngameScript
             });
         }
         private void 绘制轨迹点(MySpriteDrawFrame frame, IMyTextPanel lcd, List<Vector2> 屏幕轨迹点列表)
-        {   
+        {
             for (int i = 0; i < 屏幕轨迹点列表.Count; i++)
             {
                 float 轨迹点大小 = Math.Min(Math.Max((屏幕轨迹点列表.Count - i) * 1.5f, 2f), 8f);

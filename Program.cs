@@ -28,6 +28,7 @@ namespace IngameScript
         private IMyFlightMovementBlock _flightBlock;
         private List<IMyOffensiveCombatBlock> _combatBlocks;
         private HUD显示系统 _hud系统;
+        private 陀螺仪瞄准系统 辅助瞄准;
 
         #region 性能统计变量
         private double 总运行时间毫秒;
@@ -46,7 +47,7 @@ namespace IngameScript
             // 1. 读取/写入自定义数据
             参数们 = new 参数管理器(Me);
 
-            // 2. 搜索AI块
+            // 2. 搜索编组
             IMyBlockGroup 雷达组 = GridTerminalSystem.GetBlockGroupWithName(参数们.AI雷达组名);
             var flightBlocks = new List<IMyFlightMovementBlock>();
             雷达组.GetBlocksOfType(flightBlocks);
@@ -66,7 +67,9 @@ namespace IngameScript
                 Echo("未找到AI飞行块或战斗块，脚本未启动。");
             }
             _hud系统 = new HUD显示系统(参数们);
+            辅助瞄准 = new 陀螺仪瞄准系统(参数们);
             _hud系统.初始化(雷达组);
+            辅助瞄准.初始化(雷达组);
         }
 
         public void Save()
@@ -102,11 +105,29 @@ namespace IngameScript
             Echo($"辅助瞄准已{(辅助瞄准开启 ? "开启" : "关闭")}");
             if (_hud系统.已初始化)
             {
+                
                 // 准备数据：id->预测位置
                 Dictionary<int, SimpleTargetInfo> raw = _radar.GetConfirmedTargetsPredicted();
                 Dictionary<int, TargetTracker> trackers = _radar.GetConfirmedTargetTrackers();
-                _hud系统.绘制(raw, trackers, Echo);
+                _hud系统.更新视线选定目标ID(raw);
+                弹道显示信息 弹道显示 = null;
+                if (_hud系统.视线选定目标ID != -1)
+                {
+                    double 弹道拦截时间;
+                    Vector3D 弹道预测点 = _radar.计算弹道(_hud系统.视线选定目标ID,
+                                                                参数们.武器弹速,
+                                                                _hud系统.参考驾驶舱,
+                                                                out 弹道拦截时间,
+                                                                弹药受重力影响: true);
+                    弹道显示 = new 弹道显示信息(弹道预测点, 弹道拦截时间, trackers[_hud系统.视线选定目标ID]);
+                    if (辅助瞄准开启 && 辅助瞄准.硬件就绪 && 弹道预测点 != Vector3D.Zero)
+                    {
+                        辅助瞄准.点瞄准(弹道预测点);
+                    }
+                }
+                _hud系统.绘制(raw, 弹道显示);
             }
+
             更新性能统计信息();
             if (运行次数 % 20 == 0) 性能统计信息缓存 = 性能统计信息.ToString();
             Echo(性能统计信息缓存);
@@ -118,6 +139,7 @@ namespace IngameScript
             if(argument == "toggle_aim_assist")
             {
                 辅助瞄准开启 = !辅助瞄准开启;
+                辅助瞄准.重置();
                 return;
             }
         }
@@ -132,7 +154,7 @@ namespace IngameScript
             double 上次运行时间毫秒 = Runtime.LastRunTimeMs;
 
             总运行时间毫秒 += 上次运行时间毫秒;
-            运行次数 = (运行次数 + 1) % int.MaxValue;
+            运行次数++;
             if (运行次数 % 600 == 0)
             {
                 // 每600次运行重置统计信息

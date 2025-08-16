@@ -23,6 +23,7 @@ namespace IngameScript
                                     TargetTracker 目标跟踪器,
                                     SimpleTargetInfo 当前目标,
                                     out double 弹道拦截时间,
+                                    Vector3D? 参考位置 = null,
                                     double 武器弹速 = 500,
                                     int 预测迭代次数 = 3,
                                     bool 弹药受重力影响 = true
@@ -35,12 +36,16 @@ namespace IngameScript
             Vector3D 舰船速度 = 飞控.GetShipVelocities().LinearVelocity;
             Vector3D 重力向量 = 飞控.GetNaturalGravity();
             bool 存在重力 = 重力向量.LengthSquared() > 0.05;
+            
+            // 确定计算基准位置（速度始终使用飞控速度）
+            Vector3D 基准位置 = 参考位置 ?? 舰船位置;
+            
             // 获取当前目标更新时间差
             long 基础时间差 = 当前目标.TimeStamp - 目标跟踪器.GetLatestTimeStamp();
 
             // 计算线性解作为初始拦截点
             Vector3D 拦截点;
-            Vector3D 相对位置 = 当前目标.Position - 舰船位置;
+            Vector3D 相对位置 = 当前目标.Position - 基准位置;
             Vector3D 相对速度 = 当前目标.Velocity - 舰船速度;
 
             // 解二次方程计算拦截时间
@@ -95,7 +100,7 @@ namespace IngameScript
             for (int i = 0; i < 预测迭代次数; i++)
             {
                 // 计算预判位置需要的时间
-                double 距离 = Vector3D.Distance(舰船位置, 拦截点);
+                double 距离 = Vector3D.Distance(基准位置, 拦截点);
                 double 飞行时间 = 距离 / 武器弹速;
                 弹道拦截时间 = 飞行时间;
                 // 预测目标在未来位置
@@ -119,7 +124,7 @@ namespace IngameScript
             if (存在重力 && 弹药受重力影响)
             {
                 // 计算预判位置需要的时间
-                double 距离 = Vector3D.Distance(舰船位置, 拦截点);
+                double 距离 = Vector3D.Distance(基准位置, 拦截点);
                 double 飞行时间 = 距离 / 武器弹速;
                 // 重力导致的弹道下降量: 1/2 * g * t²
                 Vector3D 重力补偿量 = 0.5 * 重力向量 * 飞行时间 * 飞行时间;

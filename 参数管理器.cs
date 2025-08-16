@@ -40,10 +40,6 @@ namespace IngameScript
         /// 战斗块攻击模式
         /// </summary>
         public int 战斗块攻击模式 { get; set; } = 3; // 拦截模式
-        /// <summary>
-        /// 战斗块目标优先级
-        /// </summary>
-        public OffensiveCombatTargetPriority 目标优先级 { get; set; } = OffensiveCombatTargetPriority.Largest;
 
         #endregion
 
@@ -59,7 +55,49 @@ namespace IngameScript
 
         #region 火控参数
         public double 武器弹速 { get; set; } = 500.0; // 米/秒
+
         #endregion
+
+        #region 辅助瞄准参数
+
+        /// <summary>
+        /// 外环PID参数结构
+        /// </summary>
+        public class PID参数
+        {
+            public double P系数 { get; set; }
+            public double I系数 { get; set; }
+            public double D系数 { get; set; }
+
+            public PID参数(double p, double i, double d)
+            {
+                P系数 = p;
+                I系数 = i;
+                D系数 = d;
+            }
+        }
+
+        /// <summary>
+        /// 外环PID参数
+        /// </summary>
+        public PID参数 外环参数 { get; set; } = new PID参数(5, 0, 0);
+
+        /// <summary>
+        /// 内环PID参数
+        /// </summary>
+        public PID参数 内环参数 { get; set; } = new PID参数(21, 0.01, 0.9);
+        /// <summary>
+        /// 辅助瞄准更新间隔，单位：帧
+        /// </summary>
+        public int 辅助瞄准更新间隔 { get; set; } = 5;
+        public double 角度容差 { get; set; } =  Math.PI / 180.0; // 1 度
+        public double 常驻滚转转速 { get; set; } = 0;
+        public double 获取PID时间常数()
+        {
+            return 时间常数 * 辅助瞄准更新间隔;
+        }
+        #endregion
+
         #region 构造函数
 
         /// <summary>
@@ -116,6 +154,20 @@ namespace IngameScript
                 尝试设置参数(键, 值);
             }
         }
+        private PID参数 解析PID参数(string 参数值)
+        {
+            // 支持格式: "P,I,D"
+            var arr = 参数值.Split(',');
+            if (arr.Length == 3)
+            {
+                double p = double.Parse(arr[0]);
+                double i = double.Parse(arr[1]);
+                double d = double.Parse(arr[2]);
+                return new PID参数(p, i, d);
+            }
+            return new PID参数(0, 0, 0);
+        }
+
         /// <summary>
         /// 尝试设置指定的参数
         /// </summary>
@@ -154,6 +206,18 @@ namespace IngameScript
                     case "武器弹速":
                         武器弹速 = double.Parse(参数值);
                         break;
+                    case "外环PID3":
+                        外环参数 = 解析PID参数(参数值);
+                        break;
+                    case "内环PID3":
+                        内环参数 = 解析PID参数(参数值);
+                        break;
+                    case "辅助瞄准更新间隔":
+                        辅助瞄准更新间隔 = int.Parse(参数值);
+                        break;
+                    case "角度容差":
+                        角度容差 = double.Parse(参数值) * Math.PI / 180.0; // 转换为弧度
+                        break;
                 }
             }
             catch (Exception)
@@ -191,6 +255,11 @@ namespace IngameScript
             配置.AppendLine();
             配置.AppendLine("// 火控参数");
             配置.AppendLine($"武器弹速={武器弹速}");
+            配置.AppendLine("// 辅助瞄准参数");
+            配置.AppendLine($"外环PID3={外环参数.P系数},{外环参数.I系数},{外环参数.D系数}");
+            配置.AppendLine($"内环PID3={内环参数.P系数},{内环参数.I系数},{内环参数.D系数}");
+            配置.AppendLine($"辅助瞄准更新间隔={辅助瞄准更新间隔}");
+            配置.AppendLine($"角度容差={角度容差 * 180 / Math.PI}"); // 转换为度
             return 配置.ToString();
         }
 

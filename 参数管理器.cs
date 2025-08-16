@@ -89,8 +89,8 @@ namespace IngameScript
         /// <summary>
         /// 辅助瞄准更新间隔，单位：帧
         /// </summary>
-        public int 辅助瞄准更新间隔 { get; set; } = 5;
-        public double 角度容差 { get; set; } =  Math.PI / 180.0; // 1 度
+        public int 辅助瞄准更新间隔 { get; set; } = 4;
+        public double 角度容差 { get; set; } =  Math.PI / 180.0 * 0.02; // 0.02 度
         public double 常驻滚转转速 { get; set; } = 0;
         public double 获取PID时间常数()
         {

@@ -51,6 +51,7 @@ namespace IngameScript
         public IMyShipController 参考驾驶舱 { get; private set; }
         public int 视线选定目标ID { get; private set; } = -1;
         private double 前向最小夹角 = double.MaxValue;
+        private long 内置时钟 = 0;
         // 目标-屏幕-绘制位置映射类
         private struct 目标绘制信息
         {
@@ -128,8 +129,9 @@ namespace IngameScript
         public void 绘制(Dictionary<int, SimpleTargetInfo> 目标字典, 弹道显示信息 弹道信息 = null)
         {
             if (!已初始化) return;
+            内置时钟++;
             var 驾驶舱位置 = 参考驾驶舱.GetPosition();
-
+            if (内置时钟 % 10 != 0) return;// 不解限的话LCD最多每秒更新6次
             // 0. 建立目标-屏幕-绘制位置映射表
             List<目标绘制信息> 目标绘制映射表 = new List<目标绘制信息>();
             // 1. 外层循环对于每个目标，更新一遍重点目标ID

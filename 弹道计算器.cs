@@ -105,7 +105,7 @@ namespace IngameScript
                 弹道拦截时间 = 飞行时间;
                 // 预测目标在未来位置
                 long 预测时间ms = (long)(飞行时间 * 1000) + 基础时间差;
-                var 目标信息 = 目标跟踪器.PredictFutureTargetInfo(预测时间ms, false);
+                var 目标信息 = 目标跟踪器.PredictFutureTargetInfo(预测时间ms);
 
                 // 参考系变换：从绝对位置转换到相对位置
                 // 计算舰船在飞行时间内的位移

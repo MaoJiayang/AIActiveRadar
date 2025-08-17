@@ -484,9 +484,9 @@ namespace IngameScript
             // if (index2 <= index1) index2 = index1 + 1;
 
             var p0 = _history.First; // 最新记录
-            // var p1 = _history.GetItemAt(1); // 第二新记录
-            // var p2 = _history.GetItemAt(2); // 第三新记录
-            // var p3 = _history.GetItemAt(3); // 最旧记录
+            var p1 = _history.GetItemAt(1); // 第二新记录
+            var p2 = _history.GetItemAt(2); // 第三新记录
+            var p3 = _history.GetItemAt(3); // 最旧记录
             var p3_1 = _history.GetItemAt(index3_1); // 大约1/3处
             var p3_2 = _history.GetItemAt(index3_2); // 大约2/3处
             var pt = _history.Last; // 最旧记录
@@ -496,7 +496,8 @@ namespace IngameScript
             long predictionTimeLinear = p0.TimeStamp - p3_1.TimeStamp;
 
             // 进行预测
-            SimpleTargetInfo predictedLinearTarget = PredictSecondOrder(predictionTimeLinear, hasVelocityAvailable, p3_1, p3_2, pt);
+            // SimpleTargetInfo predictedLinearTarget = PredictSecondOrder(predictionTimeLinear, hasVelocityAvailable, p3_1, p3_2, pt);
+            SimpleTargetInfo predictedLinearTarget = PredictSecondOrder(predictionTimeLinear, hasVelocityAvailable, p1, p2, p3);
             _circularMotionParams = CalculateCircularMotionParams(p3_1, p3_2, pt);
             SimpleTargetInfo predictedCircularTarget = PredictCircularMotion(predictionTimeCicular, hasVelocityAvailable, p3_1, p3_2, pt);
 

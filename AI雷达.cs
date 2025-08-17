@@ -8,17 +8,32 @@ using System;
 namespace IngameScript
 {
     /// <summary>
+    /// 检测数据结构
+    /// </summary>
+    public struct DetectionData
+    {
+        public Vector3D Position;
+        public long? EnemyId;
+        
+        public DetectionData(Vector3D position, long? enemyId)
+        {
+            Position = position;
+            EnemyId = enemyId;
+        }
+    }
+
+    /// <summary>
     /// 雷达目标信息结构
     /// </summary>
     public struct RadarTarget
     {
-        public int Id;
+        public long Id;
         public Vector3D Position;
         public long LastUpdateTick;
         public int ConfirmationLevel; // 确认级别 0-未确认, 1-暂定, 2-已确认
         public TargetState State; // 目标状态
 
-        public RadarTarget(int id, Vector3D position, long updateTime)
+        public RadarTarget(long id, Vector3D position, long updateTime)
         {
             Id = id;
             Position = position;
@@ -50,8 +65,8 @@ namespace IngameScript
         private 参数管理器 参数们;
         
         // 目标管理
-        private Dictionary<int, RadarTarget> 跟踪目标表 = new Dictionary<int, RadarTarget>();
-        private Dictionary<int, TargetTracker> 目标跟踪器表 = new Dictionary<int, TargetTracker>();
+        private Dictionary<long, RadarTarget> 跟踪目标表 = new Dictionary<long, RadarTarget>();
+        private Dictionary<long, TargetTracker> 目标跟踪器表 = new Dictionary<long, TargetTracker>();
         
         // 优先级轮换
         private OffensiveCombatTargetPriority[] 优先级序列 = new[] {
@@ -67,7 +82,7 @@ namespace IngameScript
         // 计数器和参数
         private long 帧计数 = 0;
         public long 当前时间戳ms { get { return 帧转毫秒(帧计数); } }
-        private int 下一个目标ID = 1;
+        private long 下一个目标ID = 1;
 
         public AI雷达(IMyFlightMovementBlock flightBlock, List<IMyOffensiveCombatBlock> combatBlocks, 参数管理器 参数管理器)
         {
@@ -131,19 +146,18 @@ namespace IngameScript
         /// 主更新方法
         /// </summary>
         /// <returns>是否检测到新目标</returns>
-        public bool Update()
+        public bool Update(Action<string> Echo = null)
         {
             帧计数++;
-            bool 有新目标 = false;
 
             // 1. 获取当前检测数据
-            Vector3D 当前检测 = 获取当前检测数据();
+            DetectionData 当前检测 = 获取当前检测数据();
             
             // 2. 数据关联与目标更新
-            有新目标 = 处理检测数据(当前检测);
+            bool 有新目标 = 处理检测数据(当前检测);
             
             // 3. 更新目标跟踪器
-            更新目标跟踪器();
+            更新目标跟踪器(Echo);
             
             // 4. 目标状态管理
             管理目标状态();
@@ -157,8 +171,8 @@ namespace IngameScript
         /// <summary>
         /// 获取当前检测数据
         /// </summary>
-        /// <returns>当前检测数据（优先级: 位置）</returns>
-        private Vector3D 获取当前检测数据()
+        /// <returns>当前检测数据</returns>
+        private DetectionData 获取当前检测数据()
         {
             // 获取AI块当前检测的目标
             var 路径点列表 = new List<IMyAutopilotWaypoint>();
@@ -166,32 +180,46 @@ namespace IngameScript
             if(路径点列表.Count == 0)
             {
                 // 如果没有路径点，返回0
-                return Vector3D.Zero;
+                return new DetectionData(Vector3D.Zero, null);
             }
             var 路径点 = 路径点列表[路径点列表.Count - 1];
             var m = 路径点.Matrix;
-            return new Vector3D(m.M41, m.M42, m.M43);
+            Vector3D 位置 = new Vector3D(m.M41, m.M42, m.M43);
+            
+            // 尝试获取游戏内分配的敌方ID
+            long? 敌方ID = null;
+            if (战斗块列表 != null && 当前攻击块索引 < 战斗块列表.Count && 战斗块列表[当前攻击块索引] != null)
+            {
+                IMyOffensiveCombatBlock 当前战斗块 = 战斗块列表[当前攻击块索引];
+                if (当前战斗块.SearchEnemyComponent != null)
+                {
+                    敌方ID = 当前战斗块.SearchEnemyComponent.FoundEnemyId;
+                }
+            }
+            
+            return new DetectionData(位置, 敌方ID);
         }
 
         /// <summary>
         /// 处理检测数据，进行目标关联
         /// </summary>
-        private bool 处理检测数据(Vector3D 当前检测)
+        private bool 处理检测数据(DetectionData 当前检测)
         {
             bool 有新目标 = false;
-            if (当前检测 == Vector3D.Zero) return false;
+            if (当前检测.Position == Vector3D.Zero) return false;
+            
             // 检查是否与已有目标关联
-            int 关联目标ID = _查找关联目标(当前检测);
+            long 关联目标ID = _查找关联目标(当前检测.Position, 当前检测.EnemyId);
             
             if (关联目标ID != -1)
             {
                 // 更新已有目标
-                _更新已有目标(关联目标ID, 当前检测);
+                _更新已有目标(关联目标ID, 当前检测.Position);
             }
             else
             {
                 // 创建新目标
-                _创建新目标(当前检测);
+                _创建新目标(当前检测.Position, 当前检测.EnemyId);
                 有新目标 = true;
             }
             
@@ -199,12 +227,20 @@ namespace IngameScript
         }
 
         /// <summary>
-        /// 查找与给定位置关联的目标ID
+        /// 查找与给定位置关联的目标ID，-1表示未找到
         /// </summary>
-        private int _查找关联目标(Vector3D 位置)
+        private long _查找关联目标(Vector3D 位置, long? 游戏内敌方ID)
         {
+            // 1. 如果有游戏内敌方ID，优先查找是否已存在该ID的目标
+            if (游戏内敌方ID.HasValue)
+            {
+                if (跟踪目标表.ContainsKey(游戏内敌方ID.Value)) return 游戏内敌方ID.Value;
+                else return -1;
+            }
+            
+            // 2. 进行最近邻关联
             double 最小距离 = 参数们.目标关联距离阈值;
-            int 最佳匹配ID = -1;
+            long 最佳匹配ID = -1;
             
             foreach (var 目标项 in 跟踪目标表)
             {
@@ -246,12 +282,12 @@ namespace IngameScript
         /// <summary>
         /// 更新已有目标
         /// </summary>
-        private void _更新已有目标(int 目标ID, Vector3D 位置)
+        private void _更新已有目标(long 目标ID, Vector3D 位置)
         {
             if (!跟踪目标表.ContainsKey(目标ID))
                 return;
                 
-            var 目标 = 跟踪目标表[目标ID];
+            RadarTarget 目标 = 跟踪目标表[目标ID];
             
             // 更新目标信息
             目标.Position = 位置;
@@ -281,9 +317,20 @@ namespace IngameScript
         /// <summary>
         /// 创建新目标
         /// </summary>
-        private void _创建新目标(Vector3D 位置)
+        private void _创建新目标(Vector3D 位置, long? 游戏内敌方ID)
         {
-            int 新ID = 下一个目标ID++;
+            long 新ID;
+            
+            // 优先使用游戏内分配的ID，如果没有则使用自增ID
+            if (游戏内敌方ID.HasValue)
+            {
+                新ID = 游戏内敌方ID.Value;
+            }
+            else
+            {
+                新ID = 下一个目标ID++;
+            }
+
             var 新目标 = new RadarTarget(新ID, 位置, 帧计数);
             新目标.ConfirmationLevel = 1;
             新目标.State = TargetState.Detected;
@@ -298,19 +345,18 @@ namespace IngameScript
         /// <summary>
         /// 更新目标跟踪器
         /// </summary>
-        private void 更新目标跟踪器()
+        private void 更新目标跟踪器(Action<string> Echo = null)
         {
-            foreach (var 目标项 in 跟踪目标表.ToList())
+            foreach (var 目标项 in 跟踪目标表)
             {
-                int ID = 目标项.Key;
-                var 目标 = 目标项.Value;
-                
-                if (目标.LastUpdateTick != 帧计数) // 只更新当前帧刷新了的目标
-                    continue;
-                if (目标跟踪器表.ContainsKey(ID))
+                long ID = 目标项.Key;
+                RadarTarget 目标 = 目标项.Value;
+
+                // 只更新当前帧刷新了的目标
+                if (目标.LastUpdateTick == 帧计数 && 目标跟踪器表.ContainsKey(ID))
                 {
-                    var 跟踪器 = 目标跟踪器表[ID];
-                    if (当前时间戳ms - 跟踪器.GetLatestTimeStamp() > 30) // 避免过度更新引入噪声
+                    TargetTracker 跟踪器 = 目标跟踪器表[ID];
+                    if (当前时间戳ms - 跟踪器.GetLatestTimeStamp() > 330) // 避免过度更新引入噪声
                         跟踪器.UpdateTarget(目标.Position, 当前时间戳ms);
                 }
             }
@@ -321,10 +367,10 @@ namespace IngameScript
         /// </summary>
         private void 管理目标状态()
         {
-            var 待删除列表 = new List<int>();
+            var 待删除列表 = new List<long>();
             foreach (var 目标项 in 跟踪目标表.ToList())
             {
-                int ID = 目标项.Key;
+                long ID = 目标项.Key;
                 var 目标 = 目标项.Value;
 
                 long 未更新帧数 = 帧计数 - 目标.LastUpdateTick;
@@ -354,7 +400,7 @@ namespace IngameScript
                 }
             }
 
-            foreach (int ID in 待删除列表)
+            foreach (long ID in 待删除列表)
             {
                 跟踪目标表.Remove(ID);
                 目标跟踪器表.Remove(ID);
@@ -404,17 +450,17 @@ namespace IngameScript
         /// 获取所有跟踪中的目标
         /// </summary>
         /// <returns>目标字典，键为目标ID</returns>
-        public Dictionary<int, RadarTarget> GetAllRawTargets()
+        public Dictionary<long, RadarTarget> GetAllRawTargets()
         {
-            return new Dictionary<int, RadarTarget>(跟踪目标表);
+            return new Dictionary<long, RadarTarget>(跟踪目标表);
         }
 
         /// <summary>
         /// 获取所有已确认的目标
         /// </summary>
-        public Dictionary<int, RadarTarget> GetConfirmedTargets()
+        public Dictionary<long, RadarTarget> GetConfirmedTargets()
         {
-            var 已确认目标 = new Dictionary<int, RadarTarget>();
+            var 已确认目标 = new Dictionary<long, RadarTarget>();
             foreach (var 目标项 in 跟踪目标表)
             {
                 if (目标项.Value.State == TargetState.Confirmed || 目标项.Value.State == TargetState.Tracking)
@@ -428,7 +474,7 @@ namespace IngameScript
         /// <summary>
         /// 获取指定ID的目标信息
         /// </summary>
-        public RadarTarget? GetTarget(int targetId)
+        public RadarTarget? GetTarget(long targetId)
         {
             if (跟踪目标表.ContainsKey(targetId))
             {
@@ -440,7 +486,7 @@ namespace IngameScript
         /// <summary>
         /// 获取目标的上次扫描更新距离当前的帧数
         /// </summary>
-        public long GetTargetUpdateAge(int targetId)
+        public long GetTargetUpdateAge(long targetId)
         {
             if (跟踪目标表.ContainsKey(targetId))
             {
@@ -453,9 +499,9 @@ namespace IngameScript
         /// 获取所有已确认目标的预测信息
         /// </summary>
         /// <returns>字典，键为目标ID，值为预测的目标信息</returns>
-        public Dictionary<int, SimpleTargetInfo> GetConfirmedTargetsPredicted()
+        public Dictionary<long, SimpleTargetInfo> GetConfirmedTargetsPredicted()
         {
-            var 预测目标字典 = new Dictionary<int, SimpleTargetInfo>();
+            var 预测目标字典 = new Dictionary<long, SimpleTargetInfo>();
             
             foreach (var 目标项 in 跟踪目标表)
             {
@@ -492,9 +538,9 @@ namespace IngameScript
             return 预测目标字典;
         }
 
-        public Dictionary<int, TargetTracker> GetConfirmedTargetTrackers()
+        public Dictionary<long, TargetTracker> GetConfirmedTargetTrackers()
         {
-            var 已确认目标跟踪器 = new Dictionary<int, TargetTracker>();
+            var 已确认目标跟踪器 = new Dictionary<long, TargetTracker>();
             foreach (var 目标项 in 跟踪目标表)
             {
                 // 只添加已确认和正在跟踪的目标
@@ -508,7 +554,7 @@ namespace IngameScript
             }
             return 已确认目标跟踪器;
         }
-        public Vector3D 计算弹道(int 目标ID, double 武器弹速, IMyShipController 参考驾驶舱, out double 弹道拦截时间, Vector3D? 参考位置 = null, bool 弹药受重力影响 = true)
+        public Vector3D 计算弹道(long 目标ID, double 武器弹速, IMyShipController 参考驾驶舱, out double 弹道拦截时间, Vector3D? 参考位置 = null, bool 弹药受重力影响 = true)
         {
             弹道拦截时间 = -1.0;
             Vector3D 预测落点 = Vector3D.Zero;
@@ -516,9 +562,9 @@ namespace IngameScript
             {
                 TargetTracker 选定目标跟踪器 = 目标跟踪器表[目标ID];
                 // RadarTarget 雷达目标信息 = 跟踪目标表[目标ID];
-                long 更新时间差 = Math.Max(0, 当前时间戳ms - 选定目标跟踪器.GetLatestTimeStamp());
-                SimpleTargetInfo 选定目标信息 = 选定目标跟踪器.PredictFutureTargetInfo(更新时间差, false);
-                // 选定目标信息.Position = 雷达目标信息.Position; // 确保使用最新位置，过一遍预测是为了获取其他物理量的估算值
+                long 更新时间差 = Math.Max(0, 当前时间戳ms - 选定目标跟踪器.GetLatestTimeStamp()) + 333;
+                SimpleTargetInfo 选定目标信息 = 选定目标跟踪器.PredictFutureTargetInfo(更新时间差);
+                // 选定目标信息.TimeStamp = 当前时间戳ms;
                 预测落点 = 弹道计算器.计算预测位置(参考驾驶舱, 选定目标跟踪器, 选定目标信息, out 弹道拦截时间, 参考位置, 武器弹速, 弹药受重力影响: 弹药受重力影响);
             }
             return 预测落点;
@@ -529,7 +575,7 @@ namespace IngameScript
         /// <param name="targetId">目标ID</param>
         /// <param name="futureTimeMs">预测时间（毫秒）</param>
         /// <returns>预测的目标信息，如果目标不存在返回null</returns>
-        public SimpleTargetInfo? PredictTargetPosition(int targetId, long futureTimeMs)
+        public SimpleTargetInfo? PredictTargetPosition(long targetId, long futureTimeMs)
         {
             if (目标跟踪器表.ContainsKey(targetId))
             {
@@ -541,7 +587,7 @@ namespace IngameScript
         /// <summary>
         /// 获取目标跟踪器
         /// </summary>
-        public TargetTracker GetTargetTracker(int targetId)
+        public TargetTracker GetTargetTracker(long targetId)
         {
             if (目标跟踪器表.ContainsKey(targetId))
             {

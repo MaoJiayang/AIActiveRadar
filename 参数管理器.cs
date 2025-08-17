@@ -20,7 +20,7 @@ namespace IngameScript
         /// <summary>
         /// 目标历史记录最大长度
         /// </summary>
-        public int 目标历史最大长度 { get; set; } = 5;
+        public int 目标历史最大长度 { get; set; } = 8;
 
         #endregion
 

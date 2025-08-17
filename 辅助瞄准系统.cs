@@ -99,6 +99,7 @@ namespace IngameScript
         }
         public void 重置()
         {
+            if(内部时钟 == 0) return; // 如果已经重置过则不再执行
             // 重置所有PID控制器
             外环PID控制器PYR.Reset();
             内环PID控制器PYR.Reset();

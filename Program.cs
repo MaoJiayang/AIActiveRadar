@@ -126,6 +126,7 @@ namespace IngameScript
                         辅助瞄准.点瞄准(弹道预测点);
                     }
                 }
+                else 辅助瞄准.重置();
                 _hud系统.更新视线选定目标ID(raw, 弹道预测点);
                 _hud系统.绘制(raw, 弹道显示);
             }

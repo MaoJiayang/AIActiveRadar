@@ -562,7 +562,12 @@ namespace IngameScript
             {
                 TargetTracker 选定目标跟踪器 = 目标跟踪器表[目标ID];
                 // RadarTarget 雷达目标信息 = 跟踪目标表[目标ID];
-                long 更新时间差 = Math.Max(0, 当前时间戳ms - 选定目标跟踪器.GetLatestTimeStamp()) + 333;
+                long 额外时间差 = 0;
+                if (选定目标跟踪器.GetTargetInfoAt(1).HasValue)
+                {
+                    额外时间差 = 选定目标跟踪器.GetLatestTimeStamp() - 选定目标跟踪器.GetTargetInfoAt(1).Value.TimeStamp;
+                }
+                long 更新时间差 = Math.Max(0, 当前时间戳ms - 选定目标跟踪器.GetLatestTimeStamp()) + 额外时间差;
                 SimpleTargetInfo 选定目标信息 = 选定目标跟踪器.PredictFutureTargetInfo(更新时间差);
                 // 选定目标信息.TimeStamp = 当前时间戳ms;
                 预测落点 = 弹道计算器.计算预测位置(参考驾驶舱, 选定目标跟踪器, 选定目标信息, out 弹道拦截时间, 参考位置, 武器弹速, 弹药受重力影响: 弹药受重力影响);

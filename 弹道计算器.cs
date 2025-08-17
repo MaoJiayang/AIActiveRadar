@@ -30,7 +30,6 @@ namespace IngameScript
                                     )
         {
             弹道拦截时间 = 0;
-
             // 获取舰船信息
             Vector3D 舰船位置 = 飞控.GetPosition();
             Vector3D 舰船速度 = 飞控.GetShipVelocities().LinearVelocity;

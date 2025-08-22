@@ -30,9 +30,13 @@ namespace IngameScript
         private List<IMyGyro> 陀螺仪列表 = new List<IMyGyro>();
         private IMyShipController 参考驾驶舱;
         private Dictionary<IMyGyro, Vector3D> 陀螺仪各轴点积 = new Dictionary<IMyGyro, Vector3D>();
-        public bool 硬件就绪
+        public bool 已初始化
         {
-            get { return (陀螺仪列表.Count > 0 && 参考驾驶舱 != null); }
+            get { return 陀螺仪列表.Count > 0 && 参考驾驶舱 != null; }
+        }
+        public string 初始化消息
+        {
+            get { return $"SAS状态：参考驾驶舱: {参考驾驶舱?.CustomName}，陀螺仪数量: {陀螺仪列表.Count}"; }
         }
         private long 内部时钟;
         private bool 角度误差在容忍范围内 = false;
@@ -79,7 +83,7 @@ namespace IngameScript
         /// </summary>
         public void 方向瞄准(Vector3D 方向)
         {
-            if (!硬件就绪) return;
+            if (!已初始化) return;
             内部时钟++;
             // 计算陀螺仪目标角度
             Vector3D 目标角度PYR = 计算陀螺仪目标角度(方向, 参考驾驶舱);
@@ -91,7 +95,7 @@ namespace IngameScript
         /// </summary>
         public void 点瞄准(Vector3D 目标点)
         {
-            if (!硬件就绪) return;
+            if (!已初始化) return;
             内部时钟++;
             // 计算陀螺仪目标角度
             Vector3D 目标角度PYR = 计算陀螺仪目标角度(目标点 - 参考驾驶舱.GetPosition(), 参考驾驶舱);

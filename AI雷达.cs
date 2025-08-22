@@ -82,6 +82,14 @@ namespace IngameScript
         // 计数器和参数
         private long 帧计数 = 0;
         public long 当前时间戳ms { get { return 帧转毫秒(帧计数); } }
+        public bool 已初始化
+        {
+            get { return 飞行块 != null && 战斗块列表 != null && 战斗块列表.Count > 0; }
+        }
+        public string 初始化消息
+        {
+            get { return $"AI 雷达系统状态，参考飞行块: {飞行块?.CustomName}，战斗块数量: {战斗块列表.Count}"; }
+        }
         private long 下一个目标ID = 1;
 
         public AI雷达(IMyFlightMovementBlock flightBlock, List<IMyOffensiveCombatBlock> combatBlocks, 参数管理器 参数管理器)
@@ -356,7 +364,8 @@ namespace IngameScript
                 if (目标.LastUpdateTick == 帧计数 && 目标跟踪器表.ContainsKey(ID))
                 {
                     TargetTracker 跟踪器 = 目标跟踪器表[ID];
-                    if (当前时间戳ms - 跟踪器.GetLatestTimeStamp() > 330) // 避免过度更新引入噪声
+                    // if (当前时间戳ms - 跟踪器.GetLatestTimeStamp() > 330) // 避免过度更新引入噪声
+                    if (当前时间戳ms - 跟踪器.GetLatestTimeStamp() > 100) // 避免过度更新引入噪声
                         跟踪器.UpdateTarget(目标.Position, 当前时间戳ms);
                 }
             }
@@ -416,14 +425,13 @@ namespace IngameScript
             if (战斗块列表 == null || 战斗块列表.Count == 0)
                 return;
 
-            // 切换到下一个攻击块
-            当前攻击块索引 = (当前攻击块索引 + 1) % 战斗块列表.Count;
 
+            if(战斗块列表.Count > 1) 当前攻击块索引 = (当前攻击块索引 + 1) % 战斗块列表.Count;
             // 激活新的攻击块并设置优先级
             var 当前战斗块 = 战斗块列表[当前攻击块索引];
             if (当前战斗块 != null)
             {
-                当前战斗块.ApplyAction("ActivateBehavior_On");
+                if(战斗块列表.Count > 1) 当前战斗块.ApplyAction("ActivateBehavior_On");
                 
                 // 基于攻击块索引和帧计数来计算优先级，确保不同攻击块在不同时间获得不同优先级
                 // 使用攻击块索引作为偏移，加上基于帧计数的增量，避免重复模式

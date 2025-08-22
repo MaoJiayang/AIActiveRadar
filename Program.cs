@@ -101,10 +101,17 @@ namespace IngameScript
                 Echo($"===ID:{t.Id}===\n距离:{dist:F1}m\n状态:{t.State}\n上次更新:{t.LastUpdateTick}");
             }
             Echo($"已激活HUD: {_hud系统.已初始化}");
+            if(!_hud系统.已初始化)
+            {
+                Echo(_hud系统.初始化消息);
+            }
             Echo($"辅助瞄准已{(辅助瞄准开启 ? "开启" : "关闭")}");
+            if (!辅助瞄准.已初始化)
+            {
+                Echo(辅助瞄准.初始化消息);
+            }
             if (_hud系统.已初始化)
             {
-                
                 // 准备数据：id->预测位置
                 Dictionary<long, SimpleTargetInfo> raw = _radar.GetConfirmedTargetsPredicted();
                 Dictionary<long, TargetTracker> trackers = _radar.GetConfirmedTargetTrackers();
@@ -121,7 +128,7 @@ namespace IngameScript
                     弹道显示 = new 弹道显示信息(弹道预测点, 弹道拦截时间, trackers[_hud系统.视线选定目标ID]);
                     // Echo($"弹道预测落点：X {弹道预测点.X:F1} Y {弹道预测点.Y:F1} Z {弹道预测点.Z:F1}");
                     // Echo($"弹道历史记录数量：{trackers[_hud系统.视线选定目标ID].GetHistoryCount()}");
-                    if (辅助瞄准开启 && 辅助瞄准.硬件就绪 && 弹道预测点 != Vector3D.Zero)
+                    if (辅助瞄准开启 && 辅助瞄准.已初始化 && 弹道预测点 != Vector3D.Zero)
                     {
                         辅助瞄准.点瞄准(弹道预测点);
                     }

@@ -45,13 +45,21 @@ namespace IngameScript
     {
         private 参数管理器 参数们;
         private List<IMyTextPanel> LCD列表 = new List<IMyTextPanel>();
-        public bool 已初始化 = false;
+
         private float LCD物理宽度 = 2.5f;
         private float LCD物理高度 = 2.5f;
         public IMyShipController 参考驾驶舱 { get; private set; }
         public long 视线选定目标ID { get; private set; } = -1;
         private double 前向最小夹角 = double.MaxValue;
         private long 内置时钟 = 0;
+        public bool 已初始化
+        {
+            get { return 参考驾驶舱 != null && LCD列表 != null && LCD列表.Count > 0; }
+        }
+        public string 初始化消息
+        {
+            get { return $"HUD 系统状态，参考驾驶舱: {参考驾驶舱?.CustomName}，LCD 数量: {LCD列表.Count}"; }
+        }
         // 目标-屏幕-绘制位置映射类
         private struct 目标绘制信息
         {
@@ -75,7 +83,6 @@ namespace IngameScript
             if (驾驶舱列表.Count > 0) 参考驾驶舱 = 驾驶舱列表[0];
 
             HUD组.GetBlocksOfType(LCD列表);
-            已初始化 = 参考驾驶舱 != null && LCD列表 != null && LCD列表.Count > 0;
             if (已初始化)
             {
                 foreach (var lcd in LCD列表)
@@ -85,20 +92,22 @@ namespace IngameScript
                     // 全黑
                     lcd.ScriptBackgroundColor = Color.Black;
                 }
+                if (参考驾驶舱.CubeGrid.GridSizeEnum == MyCubeSize.Small)
+                {
+                    LCD物理宽度 = 0.5f;
+                    LCD物理高度 = 0.5f;
+                }
+                else if (参考驾驶舱.CubeGrid.GridSizeEnum == MyCubeSize.Large)
+                {
+                    LCD物理宽度 = 2.5f;
+                    LCD物理高度 = 2.5f;
+                }
             }
-            if (参考驾驶舱.CubeGrid.GridSizeEnum == MyCubeSize.Small)
-            {
-                LCD物理宽度 = 0.5f;
-                LCD物理高度 = 0.5f;
-            }
-            else if (参考驾驶舱.CubeGrid.GridSizeEnum == MyCubeSize.Large)
-            {
-                LCD物理宽度 = 2.5f;
-                LCD物理高度 = 2.5f;
-            }
+
         }
         public void 更新视线选定目标ID(Dictionary<long, SimpleTargetInfo> 目标字典, Vector3D? 选定弹道预测 = null)
         {
+            if (!已初始化) return;
             long 上次选定目标ID = 视线选定目标ID;
             视线选定目标ID = -1;
             前向最小夹角 = double.MaxValue;
@@ -240,7 +249,7 @@ namespace IngameScript
             double ly = Vector3D.Dot(local, lcdUp);
             float x = (float)(lx / LCD物理宽度 + 0.5) * surfaceSize.X;
             float y = (float)(-ly / LCD物理高度 + 0.5) * surfaceSize.Y;
-            if (参考驾驶舱.CubeGrid.GridSizeEnum == MyCubeSize.Small) y -= 512;
+            // if (参考驾驶舱.CubeGrid.GridSizeEnum == MyCubeSize.Small) y -= 512;
             if (x < 0 || x > surfaceSize.X || y < 0 || y > surfaceSize.Y) return null;
 
             return new VRageMath.Vector2(x, y);

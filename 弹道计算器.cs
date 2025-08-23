@@ -19,7 +19,7 @@ namespace IngameScript
         /// </summary>
         /// <returns>预测的拦截位置</returns>
         public static Vector3D 计算预测位置(
-                                    IMyShipController 飞控,
+                                    IMyControllerCompat 飞控,
                                     TargetTracker 目标跟踪器,
                                     SimpleTargetInfo 当前目标,
                                     out double 弹道拦截时间,
@@ -33,6 +33,7 @@ namespace IngameScript
             // 获取舰船信息
             Vector3D 舰船位置 = 飞控.GetPosition();
             Vector3D 舰船速度 = 飞控.GetShipVelocities().LinearVelocity;
+            Vector3D 舰船加速度 = 飞控.GetAcceleration();
             Vector3D 重力向量 = 飞控.GetNaturalGravity();
             bool 存在重力 = 重力向量.LengthSquared() > 0.05;
             
@@ -46,9 +47,12 @@ namespace IngameScript
             Vector3D 拦截点;
             Vector3D 相对位置 = 当前目标.Position - 基准位置;
             Vector3D 相对速度 = 当前目标.Velocity - 舰船速度;
+            Vector3D 相对加速度 = 当前目标.Acceleration - 舰船加速度;
 
-            // 解二次方程计算拦截时间
-            double a = 相对速度.LengthSquared() - Math.Pow(武器弹速, 2);
+            // 解三次方程计算拦截时间（考虑加速度）
+            // |相对位置 + 相对速度*t + 0.5*相对加速度*t²| = 武器弹速*t
+            // 简化为二次方程求近似解
+            double a = 相对速度.LengthSquared() + Vector3D.Dot(相对位置, 相对加速度) - Math.Pow(武器弹速, 2);
 
             // a≈0时表示目标速度接近武器弹速，会导致解不稳定
             if (Math.Abs(a) > 0.01)
@@ -74,8 +78,10 @@ namespace IngameScript
 
                     if (!double.IsNaN(拦截时间) && 拦截时间 > 0)
                     {
-                        // 使用线性解作为迭代起点
-                        拦截点 = 当前目标.Position + 当前目标.Velocity * 拦截时间 - 舰船速度 * 拦截时间;
+                        // 使用加速度模型计算初始拦截点
+                        Vector3D 目标未来位置 = 当前目标.Position + 当前目标.Velocity * 拦截时间 + 0.5 * 当前目标.Acceleration * 拦截时间 * 拦截时间;
+                        Vector3D 舰船未来位置 = 基准位置 + 舰船速度 * 拦截时间 + 0.5 * 舰船加速度 * 拦截时间 * 拦截时间;
+                        拦截点 = 目标未来位置 - (舰船未来位置 - 基准位置);
                     }
                     else
                     {
@@ -107,10 +113,10 @@ namespace IngameScript
                 var 目标信息 = 目标跟踪器.PredictFutureTargetInfo(预测时间ms);
 
                 // 参考系变换：从绝对位置转换到相对位置
-                // 计算舰船在飞行时间内的位移
-                Vector3D 舰船位移 = 舰船速度 * 飞行时间;
+                // 计算舰船在飞行时间内的位移（匀加速运动）
+                Vector3D 舰船位移 = 舰船速度 * 飞行时间 + 0.5 * 舰船加速度 * 飞行时间 * 飞行时间;
 
-                // 对自身采用匀速模型进行修正
+                // 对自身采用匀加速运动模型进行修正
                 Vector3D 新拦截点 = 目标信息.Position - 舰船位移;
 
                 // 检查预测收敛条件

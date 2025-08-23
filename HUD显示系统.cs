@@ -48,7 +48,7 @@ namespace IngameScript
 
         private float LCD物理宽度 = 2.5f;
         private float LCD物理高度 = 2.5f;
-        public IMyShipController 参考驾驶舱 { get; private set; }
+        public IMyControllerCompat 参考驾驶舱 { get; private set; }
         public long 视线选定目标ID { get; private set; } = -1;
         private double 前向最小夹角 = double.MaxValue;
         private long 内置时钟 = 0;
@@ -80,7 +80,7 @@ namespace IngameScript
         {
             List<IMyShipController> 驾驶舱列表 = new List<IMyShipController>();
             HUD组.GetBlocksOfType(驾驶舱列表, block => block.CustomName.Contains(参数们.参考驾驶舱标签));
-            if (驾驶舱列表.Count > 0) 参考驾驶舱 = 驾驶舱列表[0];
+            if (驾驶舱列表.Count > 0) 参考驾驶舱 = new ShipControllerAdapter(驾驶舱列表[0]);
 
             HUD组.GetBlocksOfType(LCD列表);
             if (已初始化)

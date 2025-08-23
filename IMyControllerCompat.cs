@@ -82,6 +82,8 @@ namespace IngameScript
         /// 更新位置和速度（BlockMotionTracker需定期调用，真实控制器可为空实现）。
         /// </summary>
         void Update();
+        IMyCubeGrid CubeGrid { get; }
+        double RollIndicator { get; }
     }
 
     // 2. BlockMotionTracker 实现接口
@@ -129,6 +131,8 @@ namespace IngameScript
         public Vector3D GetTotalGravity() { return GetNaturalGravity() + GetArtificialGravity(); }
         public double GetShipSpeed() { return LinearVelocity.Length(); }
         public MyShipVelocities GetShipVelocities() { return new MyShipVelocities(block.CubeGrid.LinearVelocity, AngularVelocity); }
+        public IMyCubeGrid CubeGrid { get { return block.CubeGrid; } }
+        public double RollIndicator { get { return 0; } }// 普通方块无法获取
         public MyShipMass CalculateShipMass()
         {
             IMyCubeGrid grid = block.CubeGrid;
@@ -218,6 +222,8 @@ namespace IngameScript
         public MatrixD WorldMatrix { get { return ctrl.WorldMatrix; } }
         public bool IsFunctional { get { return ctrl.IsFunctional; } }
         public bool Closed { get { return ctrl.Closed; } }
+        public IMyCubeGrid CubeGrid { get { return ctrl.CubeGrid; } }
+        public double RollIndicator { get { return ctrl.RollIndicator; } }
         public ShipControllerAdapter(IMyShipController ctrl, double updateIntervalSeconds = 0.0166666667)
         {
             this.ctrl = ctrl;

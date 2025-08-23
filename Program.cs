@@ -110,6 +110,7 @@ namespace IngameScript
             {
                 Echo(辅助瞄准.初始化消息);
             }
+            else 辅助瞄准.参考驾驶舱.Update();
             if (_hud系统.已初始化)
             {
                 // 准备数据：id->预测位置

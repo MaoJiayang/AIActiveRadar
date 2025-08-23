@@ -8,10 +8,10 @@ namespace IngameScript
 {
     public partial class RelativeTargetTracker : TargetTracker
     {
-        private IMyShipController _referenceBlock;
+        private IMyControllerCompat _referenceBlock;
 
         // 构造函数：传入参考方块（原点）
-        public RelativeTargetTracker(IMyShipController referenceBlock,int maxHistory) : base(maxHistory)
+        public RelativeTargetTracker(IMyControllerCompat referenceBlock,int maxHistory) : base(maxHistory)
         {
             _referenceBlock = referenceBlock;
         }

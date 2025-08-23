@@ -562,7 +562,7 @@ namespace IngameScript
             }
             return 已确认目标跟踪器;
         }
-        public Vector3D 计算弹道(long 目标ID, double 武器弹速, IMyShipController 参考驾驶舱, out double 弹道拦截时间, Vector3D? 参考位置 = null, bool 弹药受重力影响 = true)
+        public Vector3D 计算弹道(long 目标ID, double 武器弹速, IMyControllerCompat 参考驾驶舱, out double 弹道拦截时间, Vector3D? 参考位置 = null, bool 弹药受重力影响 = true)
         {
             弹道拦截时间 = -1.0;
             Vector3D 预测落点 = Vector3D.Zero;

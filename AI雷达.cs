@@ -364,9 +364,9 @@ namespace IngameScript
                 if (目标.LastUpdateTick == 帧计数 && 目标跟踪器表.ContainsKey(ID))
                 {
                     TargetTracker 跟踪器 = 目标跟踪器表[ID];
-                    // if (当前时间戳ms - 跟踪器.GetLatestTimeStamp() > 330) // 避免过度更新引入噪声
-                    if (当前时间戳ms - 跟踪器.GetLatestTimeStamp() > 100) // 避免过度更新引入噪声
-                        跟踪器.UpdateTarget(目标.Position, 当前时间戳ms);
+                    if (当前时间戳ms - 跟踪器.GetLatestTimeStamp() > 332) // 避免过度更新/更新同一位置引入噪声
+                    // if (当前时间戳ms - 跟踪器.GetLatestTimeStamp() > 100) // 避免过度更新引入噪声
+                    跟踪器.UpdateTarget(目标.Position, 当前时间戳ms);
                 }
             }
         }
@@ -450,7 +450,7 @@ namespace IngameScript
         /// <returns></returns>
         public long 帧转毫秒(long 帧)
         {
-            return (long)Math.Round(帧 * 参数们.时间常数 * 1000);
+            return (long)Math.Round(帧 * 参数们.时间常数 * 1000.0);
         }
         #region 对外接口
 

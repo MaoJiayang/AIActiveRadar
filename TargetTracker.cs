@@ -493,7 +493,8 @@ namespace IngameScript
 
             // 计算预测时间
             long predictionTimeCicular = p0.TimeStamp - p3_1.TimeStamp;
-            long predictionTimeLinear = p0.TimeStamp - p3_1.TimeStamp;
+            // long predictionTimeLinear = p0.TimeStamp - p3_1.TimeStamp;
+            long predictionTimeLinear = p0.TimeStamp - p1.TimeStamp;
 
             // 进行预测
             // SimpleTargetInfo predictedLinearTarget = PredictSecondOrder(predictionTimeLinear, hasVelocityAvailable, p3_1, p3_2, pt);
@@ -524,7 +525,10 @@ namespace IngameScript
             circularWeight = circularWeight * (1 - learningRate) + targetCircularWeight * learningRate;
 
             // 归一化确保权重和为1
+            // L1
             double weightSum = linearWeight + circularWeight;
+            // L2
+            // double weightSum = Math.Sqrt(linearWeight * linearWeight + circularWeight * circularWeight);
             if (weightSum > 0)
             {
                 linearWeight /= weightSum;

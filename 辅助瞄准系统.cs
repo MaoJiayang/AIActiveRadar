@@ -63,7 +63,8 @@ namespace IngameScript
             List<IMyShipController> 驾驶舱列表 = new List<IMyShipController>();
             方块组.GetBlocksOfType(驾驶舱列表, block => block.CustomName.Contains(参数们.参考驾驶舱标签));
             if (驾驶舱列表.Count > 0) 参考驾驶舱 = 驾驶舱列表[0];
-            初始化PID控制器();  
+            初始化PID控制器();
+            内部时钟 = -1; // 初始化时钟为-1，第一次调用Update时会自动更新
             重置();          
         }
         private void 初始化PID控制器()

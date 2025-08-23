@@ -106,6 +106,7 @@ namespace IngameScript
                 Echo(_hud系统.初始化消息);
             }
             Echo($"辅助瞄准已{(辅助瞄准开启 ? "开启" : "关闭")}");
+            // Me.CustomName = $"辅助瞄准: {(辅助瞄准开启 ? "开" : "关")}\n弹速: {参数们.武器弹速}m/s";
             if (!辅助瞄准.已初始化)
             {
                 Echo(辅助瞄准.初始化消息);
@@ -122,10 +123,16 @@ namespace IngameScript
                 {
                     double 弹道拦截时间;
                     弹道预测点 = _radar.计算弹道(_hud系统.视线选定目标ID,
-                                                参数们.武器弹速,
+                                                参数们.武器弹速列表[参数们.当前所选弹速索引],
                                                 _hud系统.参考驾驶舱,
                                                 out 弹道拦截时间,
                                                 弹药受重力影响: true);
+                    // Echo($"拦截时间: {弹道拦截时间:F1}秒");
+                    // double 组合误差 = trackers[_hud系统.视线选定目标ID].combinationError;
+                    // double 线性权重 = trackers[_hud系统.视线选定目标ID].linearWeight;
+                    // double 圆周权重 = trackers[_hud系统.视线选定目标ID].circularWeight;
+                    // Echo($"组合误差: {组合误差:F1}米");
+                    // Echo($"线性权重：{线性权重:F3}，圆周权重：{圆周权重:F3}");
                     弹道显示 = new 弹道显示信息(弹道预测点, 弹道拦截时间, trackers[_hud系统.视线选定目标ID]);
                     // Echo($"弹道预测落点：X {弹道预测点.X:F1} Y {弹道预测点.Y:F1} Z {弹道预测点.Z:F1}");
                     // Echo($"弹道历史记录数量：{trackers[_hud系统.视线选定目标ID].GetHistoryCount()}");
@@ -147,12 +154,18 @@ namespace IngameScript
         {
             if (string.IsNullOrWhiteSpace(argument))
                 return;
-            if(argument == "toggle_aim_assist")
+            if (argument == "toggle_aim")
             {
                 辅助瞄准开启 = !辅助瞄准开启;
                 辅助瞄准.重置();
                 return;
             }
+            if (argument == "switch_weapon")
+            {
+                参数们.当前所选弹速索引++;
+                return;
+            }
+
         }
 
         #region 性能统计

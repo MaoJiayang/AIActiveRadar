@@ -106,6 +106,7 @@ namespace IngameScript
             {
                 // 计算预判位置需要的时间
                 double 距离 = Vector3D.Distance(基准位置, 拦截点);
+                // double 飞行时间 = Math.Min(距离 / 武器弹速, 1145.0);// 限制最大飞行时间
                 double 飞行时间 = 距离 / 武器弹速;
                 弹道拦截时间 = 飞行时间;
                 // 预测目标在未来位置

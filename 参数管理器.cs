@@ -2,6 +2,7 @@ using System;
 using VRage.Game.ModAPI.Ingame;
 using Sandbox.ModAPI.Ingame;
 using VRageMath;
+using System.Collections.Generic;
 
 namespace IngameScript
 {
@@ -54,8 +55,28 @@ namespace IngameScript
         #endregion
 
         #region 火控参数
-        public double 武器弹速 { get; set; } = 500.0; // 米/秒
-
+        public List<double> 武器弹速列表 { get; private set; } = new List<double> { 500.0 }; // 米/秒
+        // 添加私有字段用于保护索引设置
+        private int _当前所选弹速索引;
+        public int 当前所选弹速索引
+        {
+            get
+            {
+                return _当前所选弹速索引;
+            }
+            set
+            {
+                if (武器弹速列表 != null && 武器弹速列表.Count > 0)
+                {
+                    // 对索引进行取余，确保在列表范围内
+                    _当前所选弹速索引 = ((value % 武器弹速列表.Count) + 武器弹速列表.Count) % 武器弹速列表.Count;
+                }
+                else
+                {
+                    _当前所选弹速索引 = 0;
+                }
+            }
+        }
         #endregion
 
         #region 辅助瞄准参数
@@ -167,7 +188,21 @@ namespace IngameScript
             }
             return new PID参数(0, 0, 0);
         }
-
+        private List<double> 解析弹速列表(string 参数值)
+        {
+            var result = new List<double>();
+            // 支持格式: "{<value1>,<value2>,<value3>}"
+            var arr = 参数值.Trim('{', '}').Split(',');
+            foreach (var item in arr)
+            {
+                double value;
+                if (double.TryParse(item, out value))
+                {
+                    result.Add(value);
+                }
+            }
+            return result;
+        }
         /// <summary>
         /// 尝试设置指定的参数
         /// </summary>
@@ -203,9 +238,6 @@ namespace IngameScript
                     case "暂定目标超时帧数":
                         暂定目标超时帧数 = int.Parse(参数值);
                         break;
-                    case "武器弹速":
-                        武器弹速 = double.Parse(参数值);
-                        break;
                     case "外环PID3":
                         外环参数 = 解析PID参数(参数值);
                         break;
@@ -217,6 +249,9 @@ namespace IngameScript
                         break;
                     case "角度容差":
                         角度容差 = double.Parse(参数值) * Math.PI / 180.0; // 转换为弧度
+                        break;
+                    case "武器弹速列表":
+                        武器弹速列表 = 解析弹速列表(参数值);
                         break;
                 }
             }
@@ -254,7 +289,7 @@ namespace IngameScript
             配置.AppendLine($"暂定目标超时帧数={暂定目标超时帧数}");
             配置.AppendLine();
             配置.AppendLine("// 火控参数");
-            配置.AppendLine($"武器弹速={武器弹速}");
+            配置.AppendLine($"武器弹速列表={{ {string.Join(",", 武器弹速列表)} }}");
             配置.AppendLine("// 辅助瞄准参数");
             配置.AppendLine($"外环PID3={外环参数.P系数},{外环参数.I系数},{外环参数.D系数}");
             配置.AppendLine($"内环PID3={内环参数.P系数},{内环参数.I系数},{内环参数.D系数}");

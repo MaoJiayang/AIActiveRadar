@@ -354,11 +354,11 @@ namespace IngameScript
             frame.Add(new MySprite
             {
                 Type = SpriteType.TEXT,
-                Data = $"Cir: {cw:F2}\nLin: {lw:F2}\nErr: {totalError:F0}m",
-                Position = new VRageMath.Vector2(75, 10),
+                Data = $"Cir: {cw:F2}\nLin: {lw:F2}\nErr: {totalError:F0}m\n PS: {参数们.武器弹速列表[参数们.当前所选弹速索引]}m/s",
+                Position = new VRageMath.Vector2(10, 10),
                 Color = Color.Green,
                 FontId = "White",
-                Alignment = TextAlignment.RIGHT,
+                Alignment = TextAlignment.LEFT,
                 RotationOrScale = 0.618f
             });
         }

@@ -1,5 +1,19 @@
 ﻿R e a d m e
 -----------
-
-In this file you can include any instructions or other comments you want to have injected onto the 
-top of your final script. You can safely delete this file if you do not want any such comments.
+编组名称：AI雷达
+以下所有内容编组在一起就行
+AI雷达系统
+必须组件：
+- 一个飞行块，一个攻击块
+可选：更多的攻击块
+HUD显示系统：
+- 一个名字里含有REF的驾驶舱
+- 一个1*1的LCD
+可选：更多的LCD
+自瞄系统：
+- 一个名字里含有REF的驾驶舱
+- 一个陀螺仪
+可选：更多的陀螺仪
+可用参数：
+toggle_aim - 开关自瞄
+switch_weapon - 切换弹速参数，参见自定义数据

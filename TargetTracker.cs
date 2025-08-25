@@ -215,8 +215,8 @@ namespace IngameScript
             var p0 = _history.First;
             var pm = _history.GetItemAt(index2);
             var pt = _history.Last;
-            // var p1 = _history.GetItemAt(1);
-            // var p2 = _history.GetItemAt(2);
+            var p1 = _history.GetItemAt(1);
+            var p2 = _history.GetItemAt(2);
 
             // 检查权重，避免不必要的计算
             bool useLinear = Math.Abs(linearWeight) > 1e-3;
@@ -228,7 +228,8 @@ namespace IngameScript
             if (useLinear && useCircular)
             {
                 // 两种预测都需要，进行加权组合
-                linearPrediction = PredictSecondOrder(futureTimeMs, hasVelocityAvailable, p0, pm, pt);
+                linearPrediction = PredictSecondOrder(futureTimeMs, hasVelocityAvailable, p0, p1, p2);
+                // linearPrediction = PredictSecondOrder(futureTimeMs, hasVelocityAvailable, p0, pm, pt);
                 circularPrediction = PredictCircularMotion(futureTimeMs, hasVelocityAvailable, p0, pm, pt);
 
                 Vector3D combinedPosition = linearPrediction.Position * linearWeight + circularPrediction.Position * circularWeight;

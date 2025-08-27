@@ -107,7 +107,7 @@ namespace IngameScript
         }
         public void 更新视线选定目标ID(Dictionary<long, SimpleTargetInfo> 目标字典, Vector3D? 选定弹道预测 = null)
         {
-            if (!已初始化) return;
+            if (参考驾驶舱 == null) return;
             long 上次选定目标ID = 视线选定目标ID;
             视线选定目标ID = -1;
             前向最小夹角 = double.MaxValue;

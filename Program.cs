@@ -46,7 +46,6 @@ namespace IngameScript
         {
             // 1. 读取/写入自定义数据
             参数们 = new 参数管理器(Me);
-
             // 2. 搜索编组
             IMyBlockGroup 雷达组 = GridTerminalSystem.GetBlockGroupWithName(参数们.AI雷达组名);
             var flightBlocks = new List<IMyFlightMovementBlock>();
@@ -110,42 +109,46 @@ namespace IngameScript
             if (!辅助瞄准.已初始化)
             {
                 Echo(辅助瞄准.初始化消息);
-            }
-            else 辅助瞄准.参考驾驶舱.Update();
-            if (_hud系统.已初始化)
-            {
-                // 准备数据：id->预测位置
-                Dictionary<long, SimpleTargetInfo> raw = _radar.GetConfirmedTargetsPredicted();
-                Dictionary<long, TargetTracker> trackers = _radar.GetConfirmedTargetTrackers();
-                弹道显示信息 弹道显示 = null;
-                Vector3D 弹道预测点 = Vector3D.Zero;
-                if (raw.ContainsKey(_hud系统.视线选定目标ID))
-                {
-                    double 弹道拦截时间;
-                    弹道预测点 = _radar.计算弹道(_hud系统.视线选定目标ID,
-                                                参数们.武器弹速列表[参数们.当前所选弹速索引],
-                                                _hud系统.参考驾驶舱,
-                                                out 弹道拦截时间,
-                                                弹药受重力影响: true);
-                    // Echo($"拦截时间: {弹道拦截时间:F1}秒");
-                    // double 组合误差 = trackers[_hud系统.视线选定目标ID].combinationError;
-                    // double 线性权重 = trackers[_hud系统.视线选定目标ID].linearWeight;
-                    // double 圆周权重 = trackers[_hud系统.视线选定目标ID].circularWeight;
-                    // Echo($"组合误差: {组合误差:F1}米");
-                    // Echo($"线性权重：{线性权重:F3}，圆周权重：{圆周权重:F3}");
-                    弹道显示 = new 弹道显示信息(弹道预测点, 弹道拦截时间, trackers[_hud系统.视线选定目标ID]);
-                    // Echo($"弹道预测落点：X {弹道预测点.X:F1} Y {弹道预测点.Y:F1} Z {弹道预测点.Z:F1}");
-                    // Echo($"弹道历史记录数量：{trackers[_hud系统.视线选定目标ID].GetHistoryCount()}");
-                    if (辅助瞄准开启 && 辅助瞄准.已初始化 && 弹道预测点 != Vector3D.Zero)
-                    {
-                        辅助瞄准.点瞄准(弹道预测点);
-                    }
-                }
-                else 辅助瞄准.重置();
-                _hud系统.更新视线选定目标ID(raw, 弹道预测点);
-                _hud系统.绘制(raw, 弹道显示);
+                辅助瞄准.重置();
             }
 
+            if (!辅助瞄准开启) 辅助瞄准.重置();
+            else 辅助瞄准.参考驾驶舱.Update();
+
+            // 准备数据：id->预测位置
+            Dictionary<long, SimpleTargetInfo> raw = _radar.GetConfirmedTargetsPredicted();
+            Dictionary<long, TargetTracker> trackers = _radar.GetConfirmedTargetTrackers();
+            弹道显示信息 弹道显示 = null;
+            Vector3D 弹道预测点 = Vector3D.Zero;
+            Echo($"选定目标: {_hud系统.视线选定目标ID}");
+            if (raw.ContainsKey(_hud系统.视线选定目标ID))
+            {
+                double 弹道拦截时间;
+                弹道预测点 = _radar.计算弹道(_hud系统.视线选定目标ID,
+                                            参数们.武器弹速列表[参数们.当前所选弹速索引],
+                                            _hud系统.参考驾驶舱,
+                                            out 弹道拦截时间,
+                                            弹药受重力影响: true);
+                // Echo($"拦截时间: {弹道拦截时间:F1}秒");
+                // double 组合误差 = trackers[_hud系统.视线选定目标ID].combinationError;
+                // double 线性权重 = trackers[_hud系统.视线选定目标ID].linearWeight;
+                // double 圆周权重 = trackers[_hud系统.视线选定目标ID].circularWeight;
+                // Echo($"组合误差: {组合误差:F1}米");
+                // Echo($"线性权重：{线性权重:F3}，圆周权重：{圆周权重:F3}");
+                弹道显示 = new 弹道显示信息(弹道预测点, 弹道拦截时间, trackers[_hud系统.视线选定目标ID]);
+                // Echo($"弹道预测落点：X {弹道预测点.X:F1} Y {弹道预测点.Y:F1} Z {弹道预测点.Z:F1}");
+                // Echo($"弹道历史记录数量：{trackers[_hud系统.视线选定目标ID].GetHistoryCount()}");
+                if (辅助瞄准开启 && 辅助瞄准.已初始化 && 弹道预测点 != Vector3D.Zero)
+                {
+                    辅助瞄准.点瞄准(弹道预测点);
+                }
+            }
+            else if (辅助瞄准开启 && 辅助瞄准.已初始化) 辅助瞄准.方向瞄准(_hud系统.参考驾驶舱.WorldMatrix.Forward);
+
+            _hud系统.更新视线选定目标ID(raw, 弹道预测点);
+
+            if (_hud系统.已初始化) _hud系统.绘制(raw, 弹道显示);
+            
             更新性能统计信息();
             if (运行次数 % 20 == 0) 性能统计信息缓存 = 性能统计信息.ToString();
             Echo(性能统计信息缓存);

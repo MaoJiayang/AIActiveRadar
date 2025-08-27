@@ -159,15 +159,21 @@ namespace IngameScript
             double 角度误差大小 = 目标角度PYR.Length();
             double 滚转输入 = 控制器.RollIndicator > 0 ? 陀螺仪最高转速 :
                               控制器.RollIndicator < 0 ? -陀螺仪最高转速 : 0.0;
-            // Vector2 俯仰输入  = 控制器.RotationIndicator;
+            double 俯仰输入 = 控制器.RotationIndicator.X > 0.9 ? -陀螺仪最高转速 :
+                              控制器.RotationIndicator.X < -0.9 ? 陀螺仪最高转速 : 0.0;
+            double 偏航输入 = 控制器.RotationIndicator.Y > 0.9 ? -陀螺仪最高转速 :
+                              控制器.RotationIndicator.Y < -0.9 ? 陀螺仪最高转速 : 0.0;
+            Vector3D 手动输入 = new Vector3D(俯仰输入, 偏航输入, 0);
+            if (手动输入 != Vector3D.Zero) 手动输入 = Vector3D.TransformNormal(手动输入, 控制器.WorldMatrix); // 转换到世界坐标系
+
             if (角度误差大小 < 参数们.角度容差 && !角度误差在容忍范围内)
             {
                 // 角度误差很小，停止陀螺仪以减少抖动
                 foreach (var 陀螺仪 in 陀螺仪列表)
                 {
-                    Vector3D 陀螺仪本地命令 = Vector3D.Zero;
-                    陀螺仪本地命令 = 加入本地滚转(陀螺仪, 陀螺仪本地命令, 控制器, 参数们.常驻滚转转速 + 滚转输入);
-                    施加本地转速指令(陀螺仪, 陀螺仪本地命令);
+                    Vector3D 陀螺仪本地转速命令 = Vector3D.TransformNormal(手动输入, MatrixD.Transpose(陀螺仪.WorldMatrix));
+                    陀螺仪本地转速命令 = 加入本地滚转(陀螺仪, 陀螺仪本地转速命令, 控制器, 参数们.常驻滚转转速 + 滚转输入);
+                    施加本地转速指令(陀螺仪, 陀螺仪本地转速命令);
                 }
                 // 重置所有PID控制器
                 外环PID控制器PYR.Reset();
@@ -193,6 +199,7 @@ namespace IngameScript
             foreach (var 陀螺仪 in 陀螺仪列表)
             {
                 // 使用陀螺仪世界矩阵将世界坐标的角速度转换为陀螺仪局部坐标系
+                最终旋转命令PYR += 手动输入;
                 Vector3D 陀螺仪本地转速命令 = Vector3D.TransformNormal(最终旋转命令PYR, MatrixD.Transpose(陀螺仪.WorldMatrix));
                 陀螺仪本地转速命令 = 加入本地滚转(陀螺仪, 陀螺仪本地转速命令, 控制器, 参数们.常驻滚转转速 + 滚转输入);
                 施加本地转速指令(陀螺仪, 陀螺仪本地转速命令);
